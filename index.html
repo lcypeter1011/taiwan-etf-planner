@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="zh-TW">
+<html lang="zh-TW" id="htmlRoot">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
@@ -18,6 +18,11 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans TC",sans
 .hero-badges{display:flex;flex-wrap:wrap;justify-content:center;gap:8px;margin-top:10px}
 .hbadge{background:rgba(14,165,233,.18);border:1px solid #0ea5e9;color:#7dd3fc;padding:3px 12px;border-radius:999px;font-size:.72rem}
 .hbadge.green{background:rgba(34,197,94,.15);border-color:#22c55e;color:#86efac}
+
+/* LANG TOGGLE */
+.lang-toggle{position:fixed;top:12px;right:14px;z-index:999;display:flex;background:rgba(15,23,42,.88);backdrop-filter:blur(6px);border:1px solid #334155;border-radius:999px;padding:3px;gap:2px}
+.lbtn{padding:4px 14px;border-radius:999px;border:none;cursor:pointer;font-size:.75rem;font-weight:700;background:transparent;color:#94a3b8;transition:all .18s;white-space:nowrap}
+.lbtn.active{background:#0ea5e9;color:#fff}
 
 /* TICKER */
 .ticker-wrap{background:#0f172a;border-bottom:1px solid #1e293b}
@@ -176,11 +181,17 @@ footer{text-align:center;font-size:.7rem;color:var(--muted);padding:16px;border-
 </head>
 <body>
 
+<!-- LANGUAGE TOGGLE -->
+<div class="lang-toggle">
+  <button class="lbtn active" id="lbtnZH" onclick="setLang('zh')">中文</button>
+  <button class="lbtn" id="lbtnEN" onclick="setLang('en')">EN</button>
+</div>
+
 <div class="hero">
-  <h1>📈 台灣高股息ETF 月月領息規劃器</h1>
-  <p>智慧配置 0056 · 00878 · 00919 · 00929，全年每月穩定現金流</p>
+  <h1 id="heroTitle">📈 台灣高股息ETF 月月領息規劃器</h1>
+  <p id="heroSub">智慧配置 0056 · 00878 · 00919 · 00929，全年每月穩定現金流</p>
   <div class="hero-badges">
-    <span class="hbadge">規模4000億以上 ETF</span>
+    <span class="hbadge" id="heroAUM">規模4000億以上 ETF</span>
     <span class="hbadge green" id="updatedBadge">⏳ 載入中...</span>
   </div>
 </div>
@@ -201,7 +212,7 @@ footer{text-align:center;font-size:.7rem;color:var(--muted);padding:16px;border-
   </div></div>
   <div class="ticker-bar">
     <span><span class="dot dot-cached" id="statusDot"></span><span id="statusTxt">載入股價中...</span></span>
-    <button class="btn btn-outline btn-sm" onclick="fetchLivePrices()">↻ 更新</button>
+    <button class="btn btn-outline btn-sm" id="refreshBtn" onclick="fetchLivePrices()">↻ 更新</button>
   </div>
 </div>
 
@@ -209,49 +220,49 @@ footer{text-align:center;font-size:.7rem;color:var(--muted);padding:16px;border-
 
 <!-- GOAL -->
 <section>
-  <div class="sec-title">🎯 目標設定</div>
+  <div class="sec-title" id="secGoal">🎯 目標設定</div>
   <div class="card goal-bar">
     <div>
-      <label>每月目標領息（元）</label>
+      <label id="labelTarget">每月目標領息（元）</label>
       <input type="number" id="targetIncome" value="50000" min="1000" step="1000" oninput="recalcAll()">
     </div>
-    <button class="btn btn-gold" onclick="autoBalance()">✨ 智慧均衡配置</button>
-    <button class="btn btn-outline" onclick="resetToDefault()">↺ 重置</button>
+    <button class="btn btn-gold" id="btnBalance" onclick="autoBalance()">✨ 智慧均衡配置</button>
+    <button class="btn btn-outline" id="btnReset" onclick="resetToDefault()">↺ 重置</button>
     <div class="goal-result">
-      <div><div class="lbl">預估所需總投入</div><div class="val" id="totalInvDisp">—</div></div>
-      <div><div class="lbl">平均月實領（估）</div><div class="val" id="avgMonthDisp">—</div></div>
+      <div><div class="lbl" id="lblTotalInv">預估所需總投入</div><div class="val" id="totalInvDisp">—</div></div>
+      <div><div class="lbl" id="lblAvgMonth">平均月實領（估）</div><div class="val" id="avgMonthDisp">—</div></div>
     </div>
   </div>
 </section>
 
 <!-- ETF CARDS -->
 <section>
-  <div class="sec-title">📊 ETF 基本資料 <small>股價每日自動更新 · 可手動修正</small></div>
+  <div class="sec-title"><span id="secETF">📊 ETF 基本資料</span> <small id="secETFSub">股價每日自動更新 · 可手動修正</small></div>
   <div class="etf-grid" id="etfCards"></div>
 </section>
 
 <!-- HEALTH DASHBOARD -->
 <section>
-  <div class="sec-title">🏥 ETF 健康評估 <small>根據近8期配息自動計算（滿分100）</small></div>
+  <div class="sec-title"><span id="secHealth">🏥 ETF 健康評估</span> <small id="secHealthSub">根據近8期配息自動計算（滿分100）</small></div>
   <div class="health-grid" id="healthGrid"></div>
 </section>
 
 <!-- TREND & PREDICTION -->
 <section>
-  <div class="sec-title">📉 配息趨勢 &amp; 未來預測 <small>線性趨勢推算，虛線為預測值，僅供參考</small></div>
+  <div class="sec-title"><span id="secTrend">📉 配息趨勢 &amp; 未來預測</span> <small id="secTrendSub">線性趨勢推算，虛線為預測值，僅供參考</small></div>
   <div class="trend-wrap"><canvas id="trendChart"></canvas></div>
   <div class="pred-grid" id="predGrid"></div>
 </section>
 
 <!-- CALENDAR -->
 <section>
-  <div class="sec-title">📅 配息月曆</div>
+  <div class="sec-title" id="secCal">📅 配息月曆</div>
   <div class="cal-grid" id="calGrid"></div>
 </section>
 
 <!-- ALLOCATION -->
 <section>
-  <div class="sec-title">⚖️ 持股比例配置 <small id="allocHint">合計需等於 100%</small>
+  <div class="sec-title"><span id="secAlloc">⚖️ 持股比例配置</span> <small id="secAllocHint">合計需等於 100%</small>
     <div class="mode-toggle">
       <button class="mbtn active" id="btnManual" onclick="setAllocMode('manual')">✏️ 全手動</button>
       <button class="mbtn" id="btn100pct" onclick="setAllocMode('100pct')">🔄 100% 自動</button>
@@ -262,21 +273,32 @@ footer{text-align:center;font-size:.7rem;color:var(--muted);padding:16px;border-
   </div>
   <div style="overflow-x:auto">
     <table class="atbl">
-      <thead><tr><th>ETF</th><th>配置比例</th><th>建議投入（元）</th><th>持股（張）</th><th>年化收益（估）</th></tr></thead>
+      <thead><tr>
+        <th id="thETF">ETF</th>
+        <th id="thAlloc">配置比例</th>
+        <th id="thInv">建議投入（元）</th>
+        <th id="thShares">持股（張）</th>
+        <th id="thAnn">年化收益（估）</th>
+      </tr></thead>
       <tbody id="allocBody"></tbody>
-      <tfoot><tr class="atot"><td>合計</td><td id="totPct">0%</td><td id="totInv">—</td><td>—</td><td id="totAnn">—</td></tr></tfoot>
+      <tfoot><tr class="atot"><td id="tdTotal">合計</td><td id="totPct">0%</td><td id="totInv">—</td><td>—</td><td id="totAnn">—</td></tr></tfoot>
     </table>
   </div>
 </section>
 
 <!-- RESULTS -->
 <section>
-  <div class="sec-title">💰 每月預估領息試算</div>
+  <div class="sec-title" id="secResults">💰 每月預估領息試算</div>
   <div class="stats-grid" id="statsGrid"></div>
   <div class="card" style="padding:16px;margin-bottom:14px"><canvas id="monthChart" style="height:240px!important"></canvas></div>
   <div style="overflow-x:auto">
     <table class="mtbl">
-      <thead><tr><th>月份</th><th>配息ETF</th><th>預估領息</th><th>達標狀況</th></tr></thead>
+      <thead><tr>
+        <th id="thMonth" style="text-align:left">月份</th>
+        <th id="thPayETF">配息ETF</th>
+        <th id="thIncome">預估領息</th>
+        <th id="thStatus">達標狀況</th>
+      </tr></thead>
       <tbody id="monthTbody"></tbody>
     </table>
   </div>
@@ -284,13 +306,13 @@ footer{text-align:center;font-size:.7rem;color:var(--muted);padding:16px;border-
 
 <!-- NOTES -->
 <section>
-  <div class="notes">
-    <strong>⚠️ 重要說明</strong>
+  <div class="notes" id="notesSection">
+    <strong id="noteTitle">⚠️ 重要說明</strong>
     <ul>
-      <li>股價每日由 GitHub Actions 自動從 Yahoo Finance 抓取並更新。</li>
-      <li>配息金額每日由自動腳本從 MoneyDJ 爬取，最新更新時間見頂部標籤。</li>
-      <li>健康評分與趨勢預測基於歷史數據，<strong>不代表未來表現</strong>，僅供學習參考。</li>
-      <li>本工具不構成任何投資建議，投資前請自行評估風險承受能力。</li>
+      <li id="note1">股價每日由 GitHub Actions 自動從 Yahoo Finance 抓取並更新。</li>
+      <li id="note2">配息金額每日由自動腳本從 MoneyDJ 爬取，最新更新時間見頂部標籤。</li>
+      <li id="note3">健康評分與趨勢預測基於歷史數據，<strong>不代表未來表現</strong>，僅供學習參考。</li>
+      <li id="note4">本工具不構成任何投資建議，投資前請自行評估風險承受能力。</li>
     </ul>
     <div class="drow">
       <a class="dlink" href="https://www.moneydj.com/ETF/X/Basic/Basic0005.xdjhtm?etfid=00919.TW" target="_blank">MoneyDJ 00919</a>
@@ -302,7 +324,7 @@ footer{text-align:center;font-size:.7rem;color:var(--muted);padding:16px;border-
 </section>
 </div>
 
-<footer>台灣高股息ETF月月領息規劃器 · 資料每日自動更新 · 僅供學習參考 <span class="fstamp" id="fStamp">載入中</span></footer>
+<footer><span id="footerText">台灣高股息ETF月月領息規劃器 · 資料每日自動更新 · 僅供學習參考</span> <span class="fstamp" id="fStamp">載入中</span></footer>
 
 <script>
 /* ═══════════════════════════════════════
@@ -324,7 +346,217 @@ const ETF_DB = [
 ];
 // <<AUTO_UPDATE_END>>
 
-const MO=['1月','2月','3月','4月','5月','6月','7月','8月','9月','10月','11月','12月'];
+/* ═══════════════════════════════════════
+   i18n — bilingual support
+   ═══════════════════════════════════════ */
+const I18N = {
+  zh: {
+    /* ETF display names */
+    'n_00919':'群益台灣精選高息','n_0056':'元大高股息','n_00878':'國泰永續高股息',
+    'n_00929':'復華台灣科技優息','n_00713':'元大台灣高息低波',
+    /* months */
+    months:['1月','2月','3月','4月','5月','6月','7月','8月','9月','10月','11月','12月'],
+    monthUnit:'月',
+    /* trend chart */
+    pred:['預+1','預+2','預+3','預+4'],
+    predLabel:'預測',
+    /* health labels */
+    stability:'穩定性',trend:'趨&ensp;勢',dividYield:'殖利率',scale:'規&ensp;模',
+    tUp:'上升 📈',tDown:'下降 📉',tStable:'持平 ➡️',
+    /* health flags */
+    highVol:'配息波動偏高',bigDrop:'配息明顯下滑 ⚠️',smallDrop:'配息小幅下滑',
+    growing:'配息成長趨勢 ✅',highYield:'高殖利率競爭力強',smallScale:'規模未達4000億',
+    allGood:'各項指標穩定',
+    /* ETF card */
+    included:'已納入',excluded:'未納入',
+    monthly:'月配息',quarterly:'季配息',
+    healthScore:'健康',
+    priceLabel:'股價（元）',yieldLabel:'殖利率（%）',
+    /* prediction cards */
+    pTrend:'配息趨勢',pNext:'下期預估配息',pYield:'預估年化殖利率',
+    pHealth:'健康評分',pRisk:'主要風險',noRisk:'無明顯風險',
+    pFlat:'持平',
+    /* calendar */
+    noDiv:'無配息',total:'合計',
+    /* alloc */
+    noETFEnabled:'請啟用至少一個ETF',
+    sharesUnit:'張',
+    /* stats */
+    sTargetLbl:'目標月收入',sTargetSub:'每月領息目標',
+    sTotalLbl:'所需總投資',sTotalSub:'依估算殖利率',
+    sAnnLbl:'預估年化收益',
+    sMetLbl:'達標月份',sMetSub:'≥目標90%計算',
+    monthAvg:'月均',
+    /* month table cell */
+    noETF:'無',
+    /* mode hints */
+    manualHint:'<strong>✏️ 全手動模式：</strong>自由調整每支ETF比例，需自行確保合計達100%。',
+    autoHint:'<strong>🔄 100% 自動模式：</strong>調整任一ETF比例時，其餘ETF將自動按比例補齊，總計永遠維持100%。',
+    /* ticker */
+    livePrice:'即時股價',cachedPrice:'快取股價',fetchFailed:'即時抓取失敗',cachedTag:'快取',
+    loading:'載入股價中...',updatedPrefix:'配息更新：',
+    /* static HTML */
+    pageTitle:'台灣高股息ETF 月月領息規劃器',
+    heroTitle:'📈 台灣高股息ETF 月月領息規劃器',
+    heroSub:'智慧配置 0056 · 00878 · 00919 · 00929，全年每月穩定現金流',
+    heroAUM:'規模4000億以上 ETF',
+    refreshBtn:'↻ 更新',
+    secGoal:'🎯 目標設定',
+    labelTarget:'每月目標領息（元）',
+    btnBalance:'✨ 智慧均衡配置',
+    btnReset:'↺ 重置',
+    lblTotalInv:'預估所需總投入',lblAvgMonth:'平均月實領（估）',
+    secETF:'📊 ETF 基本資料',secETFSub:'股價每日自動更新 · 可手動修正',
+    secHealth:'🏥 ETF 健康評估',secHealthSub:'根據近8期配息自動計算（滿分100）',
+    secTrend:'📉 配息趨勢 &amp; 未來預測',secTrendSub:'線性趨勢推算，虛線為預測值，僅供參考',
+    secCal:'📅 配息月曆',
+    secAlloc:'⚖️ 持股比例配置',secAllocHint:'合計需等於 100%',
+    btnManualLbl:'✏️ 全手動',btn100pctLbl:'🔄 100% 自動',
+    thETF:'ETF',thAlloc:'配置比例',thInv:'建議投入（元）',thShares:'持股（張）',thAnn:'年化收益（估）',
+    tdTotal:'合計',
+    secResults:'💰 每月預估領息試算',
+    thMonth:'月份',thPayETF:'配息ETF',thIncome:'預估領息',thStatus:'達標狀況',
+    noteTitle:'⚠️ 重要說明',
+    note1:'股價每日由 GitHub Actions 自動從 Yahoo Finance 抓取並更新。',
+    note2:'配息金額每日由自動腳本從 MoneyDJ 爬取，最新更新時間見頂部標籤。',
+    note3:'健康評分與趨勢預測基於歷史數據，<strong>不代表未來表現</strong>，僅供學習參考。',
+    note4:'本工具不構成任何投資建議，投資前請自行評估風險承受能力。',
+    footerText:'台灣高股息ETF月月領息規劃器 · 資料每日自動更新 · 僅供學習參考',
+  },
+  en: {
+    /* ETF display names */
+    'n_00919':'Uni-President Select High Yield','n_0056':'Yuanta High Dividend',
+    'n_00878':'Cathay Sustainable High Div','n_00929':'Fuh Hwa Tech High Yield',
+    'n_00713':'Yuanta High Div Low Vol',
+    /* months */
+    months:['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'],
+    monthUnit:'',
+    /* trend chart */
+    pred:['Fcast+1','Fcast+2','Fcast+3','Fcast+4'],
+    predLabel:'Forecast',
+    /* health labels */
+    stability:'Stability',trend:'Trend',dividYield:'Yield',scale:'AUM',
+    tUp:'Rising 📈',tDown:'Falling 📉',tStable:'Stable ➡️',
+    /* health flags */
+    highVol:'High dividend volatility',bigDrop:'Significant drop ⚠️',smallDrop:'Slight decline',
+    growing:'Growing trend ✅',highYield:'Strong high-yield',smallScale:'AUM below 400B',
+    allGood:'All indicators stable',
+    /* ETF card */
+    included:'Included',excluded:'Excluded',
+    monthly:'Monthly',quarterly:'Quarterly',
+    healthScore:'Health',
+    priceLabel:'Price (TWD)',yieldLabel:'Yield (%)',
+    /* prediction cards */
+    pTrend:'Dividend Trend',pNext:'Next Est. Dividend',pYield:'Est. Annual Yield',
+    pHealth:'Health Score',pRisk:'Key Risk',noRisk:'No major risk',
+    pFlat:'Stable',
+    /* calendar */
+    noDiv:'No dividend',total:'Total',
+    /* alloc */
+    noETFEnabled:'Please enable at least one ETF',
+    sharesUnit:'lots',
+    /* stats */
+    sTargetLbl:'Monthly Target',sTargetSub:'Monthly income goal',
+    sTotalLbl:'Total Investment',sTotalSub:'Based on est. yield',
+    sAnnLbl:'Est. Annual Return',
+    sMetLbl:'Months Met',sMetSub:'≥90% of target',
+    monthAvg:'Monthly avg',
+    /* month table cell */
+    noETF:'None',
+    /* mode hints */
+    manualHint:"<strong>✏️ Manual Mode:</strong> Freely adjust each ETF's allocation. Ensure total equals 100% yourself.",
+    autoHint:'<strong>🔄 Auto-100% Mode:</strong> Adjusting one ETF automatically redistributes others proportionally to keep total at 100%.',
+    /* ticker */
+    livePrice:'Live Price',cachedPrice:'Cached Price',fetchFailed:'Live fetch failed',cachedTag:'cached',
+    loading:'Loading prices...',updatedPrefix:'Updated: ',
+    /* static HTML */
+    pageTitle:'Taiwan High-Dividend ETF Monthly Income Planner',
+    heroTitle:'📈 Taiwan High-Dividend ETF Monthly Income Planner',
+    heroSub:'Smart allocation across 0056 · 00878 · 00919 · 00929 for stable monthly cash flow',
+    heroAUM:'AUM 400B+ TWD ETFs',
+    refreshBtn:'↻ Refresh',
+    secGoal:'🎯 Income Goal',
+    labelTarget:'Monthly Target Income (TWD)',
+    btnBalance:'✨ Smart Balance',
+    btnReset:'↺ Reset',
+    lblTotalInv:'Est. Total Investment',lblAvgMonth:'Est. Monthly Income',
+    secETF:'📊 ETF Overview',secETFSub:'Prices auto-updated daily · Manual override available',
+    secHealth:'🏥 ETF Health Score',secHealthSub:'Auto-calculated from last 8 dividends (max 100)',
+    secTrend:'📉 Dividend Trend &amp; Forecast',secTrendSub:'Linear regression projection. Dashed = forecast, for reference only',
+    secCal:'📅 Dividend Calendar',
+    secAlloc:'⚖️ Allocation Settings',secAllocHint:'Total must equal 100%',
+    btnManualLbl:'✏️ Manual',btn100pctLbl:'🔄 Auto-100%',
+    thETF:'ETF',thAlloc:'Allocation',thInv:'Suggested Amount (TWD)',thShares:'Shares (lots)',thAnn:'Est. Annual Return',
+    tdTotal:'Total',
+    secResults:'💰 Monthly Income Estimate',
+    thMonth:'Month',thPayETF:'Paying ETF',thIncome:'Est. Income',thStatus:'Goal Status',
+    noteTitle:'⚠️ Important Notice',
+    note1:'Prices are auto-fetched daily from Yahoo Finance via GitHub Actions.',
+    note2:'Dividend data is scraped daily from MoneyDJ. See the top badge for the last update time.',
+    note3:'Health scores and trend forecasts are based on historical data and <strong>do not predict future performance</strong>. For reference only.',
+    note4:'This tool does not constitute investment advice. Please assess your own risk tolerance before investing.',
+    footerText:'Taiwan High-Dividend ETF Monthly Income Planner · Data auto-updated daily · For reference only',
+  }
+};
+
+let currentLang = localStorage.getItem('etfLang') || 'zh';
+
+function t(key) {
+  return (I18N[currentLang] && I18N[currentLang][key] !== undefined)
+    ? I18N[currentLang][key]
+    : (I18N.zh[key] !== undefined ? I18N.zh[key] : key);
+}
+
+function etfName(etf) {
+  const k = 'n_' + etf.id;
+  return t(k) || etf.name;
+}
+
+function setLang(lang) {
+  currentLang = lang;
+  localStorage.setItem('etfLang', lang);
+  document.getElementById('htmlRoot').lang = lang === 'zh' ? 'zh-TW' : 'en';
+  document.getElementById('lbtnZH').className = 'lbtn' + (lang==='zh'?' active':'');
+  document.getElementById('lbtnEN').className = 'lbtn' + (lang==='en'?' active':'');
+  applyStaticI18n();
+  renderETFCards();
+  recalcAll();
+}
+
+function applyStaticI18n() {
+  const ids = [
+    'heroTitle','heroSub','heroAUM','refreshBtn','secGoal','labelTarget',
+    'btnBalance','btnReset','lblTotalInv','lblAvgMonth',
+    'secETF','secETFSub','secHealth','secHealthSub','secTrend','secTrendSub',
+    'secCal','secAlloc','secAllocHint',
+    'thETF','thAlloc','thInv','thShares','thAnn','tdTotal',
+    'secResults','thMonth','thPayETF','thIncome','thStatus',
+    'noteTitle','note1','note2','note3','note4','footerText'
+  ];
+  ids.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.innerHTML = t(id);
+  });
+  document.title = t('pageTitle');
+  // mode buttons
+  const bm = document.getElementById('btnManual');
+  const b1 = document.getElementById('btn100pct');
+  if (bm) bm.innerHTML = t('btnManualLbl');
+  if (b1) b1.innerHTML = t('btn100pctLbl');
+  // mode hint
+  const hint = document.getElementById('modeHint');
+  if (hint) hint.innerHTML = allocMode === 'manual' ? t('manualHint') : t('autoHint');
+  // updated badge (refresh if LAST_UPDATED available)
+  const badge = document.getElementById('updatedBadge');
+  if (badge && badge.textContent !== '⏳ 載入中...' && badge.textContent !== '⏳ Loading...') {
+    badge.textContent = '📅 ' + t('updatedPrefix') + LAST_UPDATED;
+  }
+  const fstamp = document.getElementById('fStamp');
+  if (fstamp && fstamp.textContent !== '載入中') {
+    fstamp.textContent = '📅 ' + t('updatedPrefix') + LAST_UPDATED;
+  }
+}
+
 let chartMo=null, chartTrend=null;
 
 /* ─── LIVE PRICE ─── */
@@ -342,7 +574,6 @@ async function fetchLivePrices(){
       if(!e) return;
       e.price=q.regularMarketPrice||e.price;
       e.priceChg=q.regularMarketChangePercent;
-      // recalc yield from live price
       const rec=e.dividendHistory.slice(0,e.frequency==='monthly'?3:4);
       const avg=rec.reduce((s,d)=>s+d.amount,0)/rec.length;
       const perYear=e.frequency==='monthly'?12:4;
@@ -370,16 +601,16 @@ function updateTicker(res,mode){
       });
     });
     document.getElementById('statusDot').className='dot dot-live';
-    document.getElementById('statusTxt').textContent=`即時股價 · ${new Date().toLocaleTimeString('zh-TW')}`;
+    document.getElementById('statusTxt').textContent=`${t('livePrice')} · ${new Date().toLocaleTimeString(currentLang==='zh'?'zh-TW':'en-US')}`;
   } else {
     ETF_DB.forEach(e=>{
       document.querySelectorAll(`[data-id="${e.id}"], [data-id="${e.id}b"]`).forEach(el=>{
         el.querySelector('.t-price').textContent=e.price.toFixed(2);
-        const c=el.querySelector('.up,.down,.flat');if(c){c.textContent='快取';c.className='flat'}
+        const c=el.querySelector('.up,.down,.flat');if(c){c.textContent=t('cachedTag');c.className='flat'}
       });
     });
     document.getElementById('statusDot').className='dot dot-cached';
-    document.getElementById('statusTxt').textContent=`快取股價 (${LAST_UPDATED}) · 即時抓取失敗`;
+    document.getElementById('statusTxt').textContent=`${t('cachedPrice')} (${LAST_UPDATED}) · ${t('fetchFailed')}`;
   }
 }
 
@@ -400,13 +631,13 @@ function healthScore(etf){
   const grade=tot>=85?'AAA':tot>=70?'AA':tot>=55?'A':tot>=40?'B':'C';
   const gc=tot>=85?'#22c55e':tot>=70?'#3b82f6':tot>=55?'#f59e0b':tot>=40?'#f97316':'#ef4444';
   const flags=[];
-  if(cv>0.2)flags.push({t:'warn',s:'配息波動偏高'});
-  if(tpct<-10)flags.push({t:'danger',s:'配息明顯下滑 ⚠️'});
-  else if(tpct<-3)flags.push({t:'warn',s:'配息小幅下滑'});
-  if(tpct>5)flags.push({t:'ok',s:'配息成長趨勢 ✅'});
-  if(etf.yield>11)flags.push({t:'ok',s:'高殖利率競爭力強'});
-  if(etf.fundSize<3000)flags.push({t:'warn',s:'規模未達4000億'});
-  if(!flags.length)flags.push({t:'ok',s:'各項指標穩定'});
+  if(cv>0.2)flags.push({t:'warn',s:t('highVol')});
+  if(tpct<-10)flags.push({t:'danger',s:t('bigDrop')});
+  else if(tpct<-3)flags.push({t:'warn',s:t('smallDrop')});
+  if(tpct>5)flags.push({t:'ok',s:t('growing')});
+  if(etf.yield>11)flags.push({t:'ok',s:t('highYield')});
+  if(etf.fundSize<3000)flags.push({t:'warn',s:t('smallScale')});
+  if(!flags.length)flags.push({t:'ok',s:t('allGood')});
   return{tot,grade,gc,stab,trend,ys,ss,tdir,tpct,flags};
 }
 
@@ -415,9 +646,9 @@ function renderHealthGrid(){
   c.innerHTML=ETF_DB.filter(e=>e.enabled).map(etf=>{
     const h=healthScore(etf);
     const r=34,cx=38,cy=38,circ=2*Math.PI*r,dash=`${h.tot/100*circ} ${circ}`;
-    const tl=h.tdir==='up'?'上升 📈':h.tdir==='down'?'下降 📉':'持平 ➡️';
+    const tl=h.tdir==='up'?t('tUp'):h.tdir==='down'?t('tDown'):t('tStable');
     const tc=h.tdir==='up'?'t-up':h.tdir==='down'?'t-down':'t-stable';
-    return `<div class="hcard" style="--top-color:${etf.color};border-top:4px solid ${etf.color}">
+    return `<div class="hcard" style="border-top:4px solid ${etf.color}">
       <div class="score-wrap">
         <svg width="76" height="76" viewBox="0 0 76 76">
           <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="#e2e8f0" stroke-width="8"/>
@@ -425,12 +656,12 @@ function renderHealthGrid(){
         </svg>
         <div class="score-text"><div class="score-num" style="color:${h.gc}">${h.tot}</div><div class="score-grade" style="color:${h.gc}">${h.grade}</div></div>
       </div>
-      <h4><span style="background:${etf.color};color:#fff;border-radius:4px;padding:1px 6px;font-size:.7rem">${etf.id}</span> ${etf.name}</h4>
+      <h4><span style="background:${etf.color};color:#fff;border-radius:4px;padding:1px 6px;font-size:.7rem">${etf.id}</span> ${etfName(etf)}</h4>
       <div class="sub-scores">
-        <div class="sub-row"><span>穩定性</span><div class="sub-bar"><div class="sub-fill" style="width:${h.stab/35*100}%;background:${etf.color}"></div></div><span>${h.stab}/35</span></div>
-        <div class="sub-row"><span>趨&ensp;勢</span><div class="sub-bar"><div class="sub-fill" style="width:${h.trend/30*100}%;background:${etf.color}"></div></div><span>${h.trend}/30</span></div>
-        <div class="sub-row"><span>殖利率</span><div class="sub-bar"><div class="sub-fill" style="width:${h.ys/20*100}%;background:${etf.color}"></div></div><span>${h.ys}/20</span></div>
-        <div class="sub-row"><span>規&ensp;模</span><div class="sub-bar"><div class="sub-fill" style="width:${h.ss/15*100}%;background:${etf.color}"></div></div><span>${h.ss}/15</span></div>
+        <div class="sub-row"><span>${t('stability')}</span><div class="sub-bar"><div class="sub-fill" style="width:${h.stab/35*100}%;background:${etf.color}"></div></div><span>${h.stab}/35</span></div>
+        <div class="sub-row"><span>${t('trend')}</span><div class="sub-bar"><div class="sub-fill" style="width:${h.trend/30*100}%;background:${etf.color}"></div></div><span>${h.trend}/30</span></div>
+        <div class="sub-row"><span>${t('dividYield')}</span><div class="sub-bar"><div class="sub-fill" style="width:${h.ys/20*100}%;background:${etf.color}"></div></div><span>${h.ys}/20</span></div>
+        <div class="sub-row"><span>${t('scale')}</span><div class="sub-bar"><div class="sub-fill" style="width:${h.ss/15*100}%;background:${etf.color}"></div></div><span>${h.ss}/15</span></div>
       </div>
       <div style="margin-bottom:6px"><span class="tbadge ${tc}">${tl}</span></div>
       <div class="flag-list">${h.flags.map(f=>`<div class="flag f-${f.t}">${f.s}</div>`).join('')}</div>
@@ -452,6 +683,7 @@ function renderTrendChart(){
   if(chartTrend)chartTrend.destroy();
   const active=ETF_DB.filter(e=>e.enabled);
   const proj=4;
+  const predLabels=t('pred');
   const datasets=[];
   active.forEach(etf=>{
     const ys=[...etf.dividendHistory].reverse().map(d=>d.amount);
@@ -459,12 +691,11 @@ function renderTrendChart(){
     const last=ys.length-1;
     const predicted=Array.from({length:proj},(_,i)=>Math.max(0,parseFloat((intercept+slope*(last+i+1)).toFixed(4))));
     datasets.push({label:etf.id,data:[...ys,...Array(proj).fill(null)],borderColor:etf.color,backgroundColor:etf.color+'1a',borderWidth:2,pointRadius:3,tension:.35,fill:false});
-    datasets.push({label:`${etf.id}預測`,data:[...Array(ys.length-1).fill(null),ys[last],...predicted],borderColor:etf.color,backgroundColor:'transparent',borderWidth:1.5,borderDash:[5,4],pointRadius:2,pointStyle:'triangle',tension:.35,fill:false});
+    datasets.push({label:`${etf.id} ${t('predLabel')}`,data:[...Array(ys.length-1).fill(null),ys[last],...predicted],borderColor:etf.color,backgroundColor:'transparent',borderWidth:1.5,borderDash:[5,4],pointRadius:2,pointStyle:'triangle',tension:.35,fill:false});
   });
   const base=active[0]||ETF_DB[0];
   const hL=[...base.dividendHistory].reverse().map(d=>d.label);
-  const pL=['預+1','預+2','預+3','預+4'].slice(0,proj);
-  chartTrend=new Chart(ctx,{type:'line',data:{labels:[...hL,...pL],datasets},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'top',labels:{font:{size:11},filter:i=>!i.text.includes('預測')}},tooltip:{callbacks:{label:c=>`${c.dataset.label}: ${c.parsed.y!=null?'$'+c.parsed.y:'—'}`}}},scales:{x:{grid:{color:'#f1f5f9'}},y:{ticks:{callback:v=>'$'+v},grid:{color:'#f1f5f9'}}}}});
+  chartTrend=new Chart(ctx,{type:'line',data:{labels:[...hL,...predLabels.slice(0,proj)],datasets},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'top',labels:{font:{size:11},filter:i=>!i.text.includes(t('predLabel'))}},tooltip:{callbacks:{label:c=>`${c.dataset.label}: ${c.parsed.y!=null?'$'+c.parsed.y:'—'}`}}},scales:{x:{grid:{color:'#f1f5f9'}},y:{ticks:{callback:v=>'$'+v},grid:{color:'#f1f5f9'}}}}});
 }
 
 /* ─── PREDICTION CARDS ─── */
@@ -478,14 +709,14 @@ function renderPredGrid(){
     const pYield=etf.price>0?Math.round(annDiv/etf.price*1000)/10:0;
     const h=healthScore(etf);
     const tc=h.tdir==='up'?'t-up':h.tdir==='down'?'t-down':'t-stable';
-    const tl=h.tdir==='up'?`+${h.tpct.toFixed(1)}% ↑`:h.tdir==='down'?`${h.tpct.toFixed(1)}% ↓`:'持平';
+    const tl=h.tdir==='up'?`+${h.tpct.toFixed(1)}% ↑`:h.tdir==='down'?`${h.tpct.toFixed(1)}% ↓`:t('pFlat');
     return `<div class="pcard">
-      <span class="elbl" style="background:${etf.color}">${etf.id} ${etf.name}</span>
-      <div class="prow"><span>配息趨勢</span><span class="pval"><span class="tbadge ${tc}" style="font-size:.68rem">${tl}</span></span></div>
-      <div class="prow"><span>下期預估配息</span><span class="pval">$${nxt.toFixed(3)}</span></div>
-      <div class="prow"><span>預估年化殖利率</span><span class="pval" style="color:${etf.color}">${pYield}%</span></div>
-      <div class="prow"><span>健康評分</span><span class="pval" style="color:${h.gc}">${h.tot}分 (${h.grade})</span></div>
-      <div class="prow"><span>主要風險</span><span class="pval" style="font-size:.7rem">${h.flags.find(f=>f.t!=='ok')?.s||'無明顯風險'}</span></div>
+      <span class="elbl" style="background:${etf.color}">${etf.id} ${etfName(etf)}</span>
+      <div class="prow"><span>${t('pTrend')}</span><span class="pval"><span class="tbadge ${tc}" style="font-size:.68rem">${tl}</span></span></div>
+      <div class="prow"><span>${t('pNext')}</span><span class="pval">$${nxt.toFixed(3)}</span></div>
+      <div class="prow"><span>${t('pYield')}</span><span class="pval" style="color:${etf.color}">${pYield}%</span></div>
+      <div class="prow"><span>${t('pHealth')}</span><span class="pval" style="color:${h.gc}">${h.tot} (${h.grade})</span></div>
+      <div class="prow"><span>${t('pRisk')}</span><span class="pval" style="font-size:.7rem">${h.flags.find(f=>f.t!=='ok')?.s||t('noRisk')}</span></div>
     </div>`;
   }).join('');
 }
@@ -493,14 +724,15 @@ function renderPredGrid(){
 /* ─── CALENDAR ─── */
 function renderCalendar(){
   const mi=calcMI();
-  document.getElementById('calGrid').innerHTML=MO.map((m,i)=>{
+  const months=t('months');
+  document.getElementById('calGrid').innerHTML=months.map((m,i)=>{
     const paying=ETF_DB.filter(e=>e.enabled&&e.payMonths.includes(i+1));
     const inc=mi[i];
     return `<div class="cal-cell ${paying.length?'has-i':''}">
       <div class="cal-mo">${m}</div>
       <div class="cal-etfs">
-        ${paying.map(e=>`<div class="cetag" style="background:${e.color}">${e.id}</div>`).join('')||'<span class="cal-empty">無配息</span>'}
-        ${inc>0?`<div style="font-size:.66rem;color:#0284c7;margin-top:3px;font-weight:700">合計 $${fmt(Math.round(inc))}</div>`:''}
+        ${paying.map(e=>`<div class="cetag" style="background:${e.color}">${e.id}</div>`).join('')||`<span class="cal-empty">${t('noDiv')}</span>`}
+        ${inc>0?`<div style="font-size:.66rem;color:#0284c7;margin-top:3px;font-weight:700">${t('total')} $${fmt(Math.round(inc))}</div>`:''}
       </div>
     </div>`;
   }).join('');
@@ -508,30 +740,32 @@ function renderCalendar(){
 
 /* ─── ETF CARDS ─── */
 function renderETFCards(){
+  const months=t('months');
   document.getElementById('etfCards').innerHTML=ETF_DB.map(etf=>{
     const h=etf.enabled?healthScore(etf):null;
-    const hm=h?`<div class="health-mini" style="background:${h.gc}18;color:${h.gc}">健康 ${h.tot}分 (${h.grade}) · ${h.tdir==='up'?'📈':h.tdir==='down'?'📉':'➡️'}</div>`:'';
+    const hm=h?`<div class="health-mini" style="background:${h.gc}18;color:${h.gc}">${t('healthScore')} ${h.tot} (${h.grade}) · ${h.tdir==='up'?'📈':h.tdir==='down'?'📉':'➡️'}</div>`:'';
     const chg=etf.priceChg;
     const cs=chg>0?'#22c55e':chg<0?'#ef4444':'#94a3b8';
     const chgStr=chg!=null?(chg>0?'+':'')+chg.toFixed(2)+'%':'';
+    const chipLabel = m => currentLang==='en' ? months[m-1] : `${m}${t('monthUnit')}`;
     return `<div class="etf-card ${etf.enabled?'active':''}" style="border-color:${etf.enabled?etf.color:'var(--border)'}">
       <div class="toggle-wrap">
         <button class="toggle ${etf.enabled?'on':''}" onclick="toggleETF('${etf.id}')"></button>
-        <span class="tlabel">${etf.enabled?'已納入':'未納入'}</span>
+        <span class="tlabel">${etf.enabled?t('included'):t('excluded')}</span>
       </div>
       <span class="badge-code" style="background:${etf.color}">${etf.id}</span>
-      <h3>${etf.name}</h3>
+      <h3>${etfName(etf)}</h3>
       <div class="etf-yield" style="color:${etf.color}">
         ${etf.yield}%
         <span class="price-lbl">$${etf.price.toFixed(2)}</span>
         ${chgStr?`<span class="price-chg" style="color:${cs}">${chgStr}</span>`:''}
       </div>
-      <div class="meta">${etf.frequency==='monthly'?'月配息':'季配息'}·${etf.fundSize}億${etf.fundSize>=4000?' ✓':' ⚠'}</div>
-      <div class="months">${etf.payMonths.map(m=>`<span class="mchip" style="background:${etf.color}">${m}月</span>`).join('')}</div>
+      <div class="meta">${etf.frequency==='monthly'?t('monthly'):t('quarterly')} · ${etf.fundSize}${currentLang==='zh'?'億':'B'} ${etf.fundSize>=4000?'✓':'⚠'}</div>
+      <div class="months">${etf.payMonths.map(m=>`<span class="mchip" style="background:${etf.color}">${chipLabel(m)}</span>`).join('')}</div>
       ${hm}
       <div class="edit-row">
-        <div style="flex:1"><label>股價（元）</label><input type="number" step=".1" value="${etf.price}" oninput="updateETF('${etf.id}','price',this.value)"></div>
-        <div style="flex:1"><label>殖利率（%）</label><input type="number" step=".1" value="${etf.yield}" oninput="updateETF('${etf.id}','yield',this.value)"></div>
+        <div style="flex:1"><label>${t('priceLabel')}</label><input type="number" step=".1" value="${etf.price}" oninput="updateETF('${etf.id}','price',this.value)"></div>
+        <div style="flex:1"><label>${t('yieldLabel')}</label><input type="number" step=".1" value="${etf.yield}" oninput="updateETF('${etf.id}','yield',this.value)"></div>
       </div>
     </div>`;
   }).join('');
@@ -552,14 +786,14 @@ function getWY(){return ETF_DB.filter(e=>e.enabled).reduce((s,e)=>s+(e.allocatio
 
 function renderAlloc(){
   const act=ETF_DB.filter(e=>e.enabled),tot=getTotInv();
-  if(!act.length){document.getElementById('allocBody').innerHTML='<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:14px">請啟用至少一個ETF</td></tr>';return}
+  if(!act.length){document.getElementById('allocBody').innerHTML=`<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:14px">${t('noETFEnabled')}</td></tr>`;return}
   document.getElementById('allocBody').innerHTML=act.map(etf=>{
     const inv=tot*(etf.allocation||0)/100,shr=inv>0?Math.floor(inv/etf.price/1000):0,ann=inv*etf.yield/100;
     return `<tr>
-      <td><span style="display:inline-block;width:9px;height:9px;background:${etf.color};border-radius:2px;margin-right:5px"></span><strong>${etf.id}</strong> ${etf.name}</td>
+      <td><span style="display:inline-block;width:9px;height:9px;background:${etf.color};border-radius:2px;margin-right:5px"></span><strong>${etf.id}</strong> ${etfName(etf)}</td>
       <td><div class="abar"><input type="range" min="0" max="100" step="1" value="${etf.allocation||0}" style="accent-color:${etf.color}" oninput="setAlloc('${etf.id}',+this.value);document.getElementById('pct${etf.id}').value=this.value" id="rng${etf.id}"><input type="number" class="apct" min="0" max="100" step="1" value="${etf.allocation||0}" oninput="setAlloc('${etf.id}',+this.value);document.getElementById('rng${etf.id}').value=this.value" id="pct${etf.id}">%</div></td>
       <td>${inv>0?fmt(Math.round(inv)):'—'}</td>
-      <td>${shr>0?shr+' 張':'—'}</td>
+      <td>${shr>0?shr+' '+t('sharesUnit'):'—'}</td>
       <td>${ann>0?fmt(Math.round(ann)):'—'}</td>
     </tr>`;
   }).join('');
@@ -577,34 +811,37 @@ function updateStats(){
   document.getElementById('avgMonthDisp').textContent='$'+fmt(Math.round(ann/12));
   const met=mi.filter(v=>v>=tgt*0.9).length;
   document.getElementById('statsGrid').innerHTML=`
-    <div class="scard"><div class="slbl">目標月收入</div><div class="sval" style="color:#0ea5e9">$${fmt(tgt)}</div><div class="ssub">每月領息目標</div></div>
-    <div class="scard"><div class="slbl">所需總投資</div><div class="sval">$${tot>0?fmt(Math.round(tot)):'—'}</div><div class="ssub">依估算殖利率</div></div>
-    <div class="scard"><div class="slbl">預估年化收益</div><div class="sval" style="color:#22c55e">$${fmt(Math.round(ann))}</div><div class="ssub">月均 $${fmt(Math.round(ann/12))}</div></div>
-    <div class="scard"><div class="slbl">達標月份</div><div class="sval">${met} / 12</div><div class="ssub">≥目標90%計算</div></div>`;
+    <div class="scard"><div class="slbl">${t('sTargetLbl')}</div><div class="sval" style="color:#0ea5e9">$${fmt(tgt)}</div><div class="ssub">${t('sTargetSub')}</div></div>
+    <div class="scard"><div class="slbl">${t('sTotalLbl')}</div><div class="sval">$${tot>0?fmt(Math.round(tot)):'—'}</div><div class="ssub">${t('sTotalSub')}</div></div>
+    <div class="scard"><div class="slbl">${t('sAnnLbl')}</div><div class="sval" style="color:#22c55e">$${fmt(Math.round(ann))}</div><div class="ssub">${t('monthAvg')} $${fmt(Math.round(ann/12))}</div></div>
+    <div class="scard"><div class="slbl">${t('sMetLbl')}</div><div class="sval">${met} / 12</div><div class="ssub">${t('sMetSub')}</div></div>`;
 }
 
 function renderMonthChart(){
   const ctx=document.getElementById('monthChart').getContext('2d');
   const tgt=parseFloat(document.getElementById('targetIncome').value)||50000;
   const tot=getTotInv();
+  const months=t('months');
   const ds=ETF_DB.filter(e=>e.enabled).map(etf=>{
     const inv=tot*(etf.allocation||0)/100,ann=inv*etf.yield/100,data=Array(12).fill(0);
     if(etf.frequency==='monthly')for(let i=0;i<12;i++)data[i]=Math.round(ann/12);
     else etf.payMonths.forEach(m=>data[m-1]=Math.round(ann/4));
     return{label:etf.id,data,backgroundColor:etf.color+'bb',borderColor:etf.color,borderWidth:1,borderRadius:3};
   });
-  ds.push({label:'目標線',data:Array(12).fill(tgt),type:'line',borderColor:'#f43f5e',borderWidth:2,borderDash:[6,4],pointRadius:0,fill:false});
+  const targetLabel=currentLang==='en'?'Target':'目標線';
+  ds.push({label:targetLabel,data:Array(12).fill(tgt),type:'line',borderColor:'#f43f5e',borderWidth:2,borderDash:[6,4],pointRadius:0,fill:false});
   if(chartMo)chartMo.destroy();
-  chartMo=new Chart(ctx,{type:'bar',data:{labels:MO,datasets:ds},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'top',labels:{font:{size:11}}},tooltip:{callbacks:{label:c=>`${c.dataset.label}: $${fmt(c.parsed.y)}`}}},scales:{x:{stacked:true,grid:{display:false}},y:{stacked:true,ticks:{callback:v=>'$'+fmtS(v)}}}}});
+  chartMo=new Chart(ctx,{type:'bar',data:{labels:months,datasets:ds},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'top',labels:{font:{size:11}}},tooltip:{callbacks:{label:c=>`${c.dataset.label}: $${fmt(c.parsed.y)}`}}},scales:{x:{stacked:true,grid:{display:false}},y:{stacked:true,ticks:{callback:v=>'$'+fmtS(v)}}}}});
 }
 
 function renderMonthTable(){
   const tgt=parseFloat(document.getElementById('targetIncome').value)||50000,mi=calcMI();
-  document.getElementById('monthTbody').innerHTML=MO.map((m,i)=>{
+  const months=t('months');
+  document.getElementById('monthTbody').innerHTML=months.map((m,i)=>{
     const inc=mi[i],paying=ETF_DB.filter(e=>e.enabled&&e.payMonths.includes(i+1));
     const hit=inc>=tgt*0.9,pct=inc>0?Math.round(inc/tgt*100):0;
     const tags=paying.map(e=>`<span style="background:${e.color};color:#fff;font-size:.67rem;padding:2px 6px;border-radius:4px;font-weight:700">${e.id}</span>`).join(' ');
-    return `<tr><td>${m}</td><td>${tags||'<span style="color:var(--muted);font-size:.78rem">無</span>'}</td>
+    return `<tr><td>${m}</td><td>${tags||`<span style="color:var(--muted);font-size:.78rem">${t('noETF')}</span>`}</td>
       <td class="${inc>0?(hit?'hit':'miss'):''}">${inc>0?'$'+fmt(Math.round(inc)):'—'}</td>
       <td>${inc>0?`<span style="font-size:.74rem;${hit?'color:#22c55e':'color:#f97316'}">${hit?'✅':'⚠️'} ${pct}%</span>`:'—'}</td></tr>`;
   }).join('');
@@ -635,16 +872,9 @@ let allocMode = 'manual';
 
 function setAllocMode(mode) {
   allocMode = mode;
-  // 更新按鈕樣式
   document.getElementById('btnManual').className = 'mbtn' + (mode==='manual'?' active':'');
   document.getElementById('btn100pct').className = 'mbtn' + (mode==='100pct'?' active':'');
-  // 更新提示文字
-  const hint = document.getElementById('modeHint');
-  if (mode === 'manual') {
-    hint.innerHTML = '<strong>✏️ 全手動模式：</strong>自由調整每支ETF比例，需自行確保合計達100%。';
-  } else {
-    hint.innerHTML = '<strong>🔄 100% 自動模式：</strong>調整任一ETF比例時，其餘ETF將自動按比例補齊，總計永遠維持100%。';
-  }
+  document.getElementById('modeHint').innerHTML = mode === 'manual' ? t('manualHint') : t('autoHint');
 }
 
 /* ─── HANDLERS ─── */
@@ -658,36 +888,30 @@ function setAlloc(id, newVal) {
   etf.allocation = clamped;
 
   if (allocMode === '100pct') {
-    // 100% 自動模式：按比例重分配給其他已啟用的ETF
     const others = ETF_DB.filter(e => e.enabled && e.id !== id);
     const remaining = Math.max(0, 100 - clamped);
-
     if (others.length > 0) {
       const othersTotal = others.reduce((s, e) => s + (e.allocation || 0), 0);
       if (othersTotal > 0) {
-        // 按原本各自比例，等比縮放填滿剩餘空間
         others.forEach(e => {
           e.allocation = Math.round(e.allocation / othersTotal * remaining * 10) / 10;
         });
       } else {
-        // 其他全為 0，平均分配
         const each = Math.round(remaining / others.length * 10) / 10;
         others.forEach(e => { e.allocation = each; });
       }
-      // 修正捨入誤差，確保精確 100%
       const active = ETF_DB.filter(e => e.enabled);
       const total = active.reduce((s, e) => s + (e.allocation || 0), 0);
       const diff = Math.round((100 - total) * 10) / 10;
       if (Math.abs(diff) >= 0.1) {
-        // 把誤差補到第一個非目標ETF
         const first = others[0];
         if (first) first.allocation = Math.round((first.allocation + diff) * 10) / 10;
       }
     }
   }
-
   recalcAll();
 }
+
 function resetToDefault(){
   ETF_DB[0].enabled=true;ETF_DB[0].allocation=28;
   ETF_DB[1].enabled=true;ETF_DB[1].allocation=30;
@@ -697,18 +921,30 @@ function resetToDefault(){
   document.getElementById('targetIncome').value=50000;
   renderETFCards();recalcAll();
 }
-function fmt(n){return n.toLocaleString('zh-TW')}
-function fmtS(n){return n>=10000?(n/10000).toFixed(1)+'萬':n.toLocaleString('zh-TW')}
+function fmt(n){return n.toLocaleString(currentLang==='zh'?'zh-TW':'en-US')}
+function fmtS(n){
+  if(currentLang==='zh') return n>=10000?(n/10000).toFixed(1)+'萬':n.toLocaleString('zh-TW');
+  return n>=10000?(n/10000).toFixed(1)+'W':n.toLocaleString('en-US');
+}
 
 /* ─── INIT ─── */
 ETF_DB[0].allocation=28;ETF_DB[1].allocation=30;ETF_DB[2].allocation=42;
 document.addEventListener('DOMContentLoaded',()=>{
-  const s=`📅 配息更新：${LAST_UPDATED}`;
-  document.getElementById('updatedBadge').textContent=s;
-  document.getElementById('fStamp').textContent=s;
-  renderETFCards();recalcAll();
-  setTimeout(fetchLivePrices,600);
-  setInterval(fetchLivePrices,300000);
+  // apply saved language
+  currentLang = localStorage.getItem('etfLang') || 'zh';
+  document.getElementById('htmlRoot').lang = currentLang === 'zh' ? 'zh-TW' : 'en';
+  document.getElementById('lbtnZH').className = 'lbtn' + (currentLang==='zh'?' active':'');
+  document.getElementById('lbtnEN').className = 'lbtn' + (currentLang==='en'?' active':'');
+
+  const s = '📅 ' + t('updatedPrefix') + LAST_UPDATED;
+  document.getElementById('updatedBadge').textContent = s;
+  document.getElementById('fStamp').textContent = s;
+
+  applyStaticI18n();
+  renderETFCards();
+  recalcAll();
+  setTimeout(fetchLivePrices, 600);
+  setInterval(fetchLivePrices, 300000);
 });
 </script>
 </body>
