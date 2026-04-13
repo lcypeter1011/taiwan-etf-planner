@@ -77,6 +77,12 @@ section{margin-bottom:26px}
 .toggle.on{background:var(--accent)}
 .toggle::after{content:'';position:absolute;top:2px;left:2px;width:15px;height:15px;background:#fff;border-radius:50%;transition:transform .2s}
 .toggle.on::after{transform:translateX(16px)}
+
+/* MODE TOGGLE */
+.mode-toggle{display:flex;gap:4px;margin-left:auto;background:#f1f5f9;padding:3px;border-radius:10px;border:1px solid var(--border)}
+.mbtn{padding:5px 13px;border-radius:8px;border:none;cursor:pointer;font-size:.76rem;font-weight:600;background:transparent;color:var(--muted);transition:all .18s;white-space:nowrap}
+.mbtn.active{background:#fff;color:var(--text);box-shadow:0 1px 4px rgba(0,0,0,.12)}
+.mode-hint{font-size:.72rem;color:var(--muted);background:#f0f9ff;border:1px solid #bae6fd;border-radius:8px;padding:5px 12px;margin-bottom:10px}
 .tlabel{font-size:.72rem;color:var(--muted)}
 
 /* HEALTH */
@@ -245,7 +251,15 @@ footer{text-align:center;font-size:.7rem;color:var(--muted);padding:16px;border-
 
 <!-- ALLOCATION -->
 <section>
-  <div class="sec-title">⚖️ 持股比例配置 <small>合計需等於 100%</small></div>
+  <div class="sec-title">⚖️ 持股比例配置 <small id="allocHint">合計需等於 100%</small>
+    <div class="mode-toggle">
+      <button class="mbtn active" id="btnManual" onclick="setAllocMode('manual')">✏️ 全手動</button>
+      <button class="mbtn" id="btn100pct" onclick="setAllocMode('100pct')">🔄 100% 自動</button>
+    </div>
+  </div>
+  <div class="mode-hint" id="modeHint">
+    <strong>✏️ 全手動模式：</strong>自由調整每支ETF比例，需自行確保合計達100%。
+  </div>
   <div style="overflow-x:auto">
     <table class="atbl">
       <thead><tr><th>ETF</th><th>配置比例</th><th>建議投入（元）</th><th>持股（張）</th><th>年化收益（估）</th></tr></thead>
@@ -616,10 +630,64 @@ function autoBalance(){
   recalcAll();
 }
 
+/* ─── ALLOC MODE ─── */
+let allocMode = 'manual';
+
+function setAllocMode(mode) {
+  allocMode = mode;
+  // 更新按鈕樣式
+  document.getElementById('btnManual').className = 'mbtn' + (mode==='manual'?' active':'');
+  document.getElementById('btn100pct').className = 'mbtn' + (mode==='100pct'?' active':'');
+  // 更新提示文字
+  const hint = document.getElementById('modeHint');
+  if (mode === 'manual') {
+    hint.innerHTML = '<strong>✏️ 全手動模式：</strong>自由調整每支ETF比例，需自行確保合計達100%。';
+  } else {
+    hint.innerHTML = '<strong>🔄 100% 自動模式：</strong>調整任一ETF比例時，其餘ETF將自動按比例補齊，總計永遠維持100%。';
+  }
+}
+
 /* ─── HANDLERS ─── */
 function toggleETF(id){const e=ETF_DB.find(x=>x.id===id);e.enabled=!e.enabled;if(!e.enabled)e.allocation=0;renderETFCards();recalcAll()}
 function updateETF(id,f,v){const e=ETF_DB.find(x=>x.id===id);e[f]=parseFloat(v)||e[f];recalcAll()}
-function setAlloc(id,v){const e=ETF_DB.find(x=>x.id===id);e.allocation=Math.max(0,Math.min(100,v||0));recalcAll()}
+
+function setAlloc(id, newVal) {
+  const etf = ETF_DB.find(x => x.id === id);
+  if (!etf) return;
+  const clamped = Math.max(0, Math.min(100, newVal || 0));
+  etf.allocation = clamped;
+
+  if (allocMode === '100pct') {
+    // 100% 自動模式：按比例重分配給其他已啟用的ETF
+    const others = ETF_DB.filter(e => e.enabled && e.id !== id);
+    const remaining = Math.max(0, 100 - clamped);
+
+    if (others.length > 0) {
+      const othersTotal = others.reduce((s, e) => s + (e.allocation || 0), 0);
+      if (othersTotal > 0) {
+        // 按原本各自比例，等比縮放填滿剩餘空間
+        others.forEach(e => {
+          e.allocation = Math.round(e.allocation / othersTotal * remaining * 10) / 10;
+        });
+      } else {
+        // 其他全為 0，平均分配
+        const each = Math.round(remaining / others.length * 10) / 10;
+        others.forEach(e => { e.allocation = each; });
+      }
+      // 修正捨入誤差，確保精確 100%
+      const active = ETF_DB.filter(e => e.enabled);
+      const total = active.reduce((s, e) => s + (e.allocation || 0), 0);
+      const diff = Math.round((100 - total) * 10) / 10;
+      if (Math.abs(diff) >= 0.1) {
+        // 把誤差補到第一個非目標ETF
+        const first = others[0];
+        if (first) first.allocation = Math.round((first.allocation + diff) * 10) / 10;
+      }
+    }
+  }
+
+  recalcAll();
+}
 function resetToDefault(){
   ETF_DB[0].enabled=true;ETF_DB[0].allocation=28;
   ETF_DB[1].enabled=true;ETF_DB[1].allocation=30;
