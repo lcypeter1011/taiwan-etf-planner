@@ -1,0 +1,647 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>台灣高股息ETF 月月領息規劃器</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+:root{
+  --bg:#f0f4f8;--card:#fff;--border:#e2e8f0;--text:#1e293b;--muted:#64748b;
+  --accent:#0ea5e9;--gold:#f59e0b;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans TC",sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
+.hero{background:linear-gradient(135deg,#0f172a,#1e3a5f,#0c4a6e);color:#fff;padding:28px 24px 22px;text-align:center}
+.hero h1{font-size:1.6rem;font-weight:800;letter-spacing:-.5px}
+.hero p{margin-top:6px;color:#94a3b8;font-size:.88rem}
+.hero-badges{display:flex;flex-wrap:wrap;justify-content:center;gap:8px;margin-top:10px}
+.hbadge{background:rgba(14,165,233,.18);border:1px solid #0ea5e9;color:#7dd3fc;padding:3px 12px;border-radius:999px;font-size:.72rem}
+.hbadge.green{background:rgba(34,197,94,.15);border-color:#22c55e;color:#86efac}
+
+/* TICKER */
+.ticker-wrap{background:#0f172a;border-bottom:1px solid #1e293b}
+.ticker{padding:7px 0;overflow:hidden}
+.ticker-inner{display:flex;white-space:nowrap;animation:scrollx 35s linear infinite}
+.ticker-inner:hover{animation-play-state:paused}
+@keyframes scrollx{from{transform:translateX(0)}to{transform:translateX(-50%)}}
+.t-item{display:inline-flex;align-items:center;gap:8px;padding:0 20px;border-right:1px solid #1e293b;font-size:.82rem}
+.t-code{font-weight:700;color:#93c5fd}
+.t-price{font-weight:700;color:#e2e8f0}
+.up{color:#4ade80}.down{color:#f87171}.flat{color:#94a3b8}
+.ticker-bar{display:flex;align-items:center;justify-content:space-between;padding:4px 14px;font-size:.7rem;color:#475569}
+.dot{width:7px;height:7px;border-radius:50%;display:inline-block;margin-right:4px}
+.dot-live{background:#22c55e;animation:pulse 2s infinite}
+.dot-cached{background:#f59e0b}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+
+/* LAYOUT */
+.container{max-width:1100px;margin:0 auto;padding:20px 14px 60px}
+section{margin-bottom:26px}
+.sec-title{font-size:.98rem;font-weight:700;margin-bottom:12px;display:flex;align-items:center;gap:8px}
+.sec-title small{font-weight:400;color:var(--muted);font-size:.76rem}
+.card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:18px}
+
+/* GOAL */
+.goal-bar{display:flex;flex-wrap:wrap;align-items:center;gap:14px;padding:16px 20px}
+.goal-bar label{font-size:.8rem;color:var(--muted);display:block;margin-bottom:3px}
+.goal-bar input[type=number]{border:1.5px solid var(--border);border-radius:10px;padding:8px 12px;font-size:.98rem;width:148px;background:#f8fafc;color:var(--text)}
+.goal-bar input:focus{outline:none;border-color:var(--accent)}
+.goal-result{flex:1;background:linear-gradient(135deg,#0ea5e9,#6366f1);color:#fff;border-radius:12px;padding:11px 16px;display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:10px;min-width:260px}
+.goal-result .lbl{font-size:.7rem;opacity:.85}
+.goal-result .val{font-size:1.25rem;font-weight:800}
+.btn{padding:8px 16px;border-radius:10px;border:none;cursor:pointer;font-size:.84rem;font-weight:600;transition:opacity .15s,transform .1s}
+.btn:hover{opacity:.85;transform:translateY(-1px)}
+.btn-gold{background:var(--gold);color:#fff}
+.btn-outline{background:transparent;border:1.5px solid var(--border);color:var(--text)}
+.btn-sm{padding:5px 12px;font-size:.76rem}
+
+/* ETF CARDS */
+.etf-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(192px,1fr));gap:12px}
+.etf-card{background:var(--card);border:2px solid var(--border);border-radius:14px;padding:13px;transition:border-color .2s}
+.etf-card.active{box-shadow:0 3px 12px rgba(0,0,0,.08)}
+.badge-code{display:inline-block;font-size:.71rem;font-weight:700;padding:2px 9px;border-radius:999px;color:#fff;margin-bottom:5px}
+.etf-card h3{font-size:.83rem;font-weight:700;line-height:1.3;margin-bottom:3px}
+.etf-yield{font-size:.98rem;font-weight:800;display:flex;align-items:baseline;gap:6px;margin:4px 0}
+.price-lbl{font-size:.78rem;color:var(--muted)}
+.price-chg{font-size:.7rem;font-weight:700}
+.meta{font-size:.7rem;color:var(--muted);margin-bottom:7px}
+.months{display:flex;flex-wrap:wrap;gap:3px;margin-bottom:7px}
+.mchip{font-size:.65rem;font-weight:700;padding:2px 6px;border-radius:4px;color:#fff}
+.health-mini{margin-top:5px;padding:4px 8px;border-radius:7px;font-size:.68rem;font-weight:600}
+.edit-row{display:flex;gap:6px;margin-top:8px}
+.edit-row label{font-size:.65rem;color:var(--muted);display:block;margin-bottom:2px}
+.edit-row input{width:100%;border:1px solid var(--border);border-radius:7px;padding:4px 7px;font-size:.77rem;background:#f8fafc;color:var(--text)}
+.toggle-wrap{display:flex;align-items:center;gap:7px;margin-bottom:8px}
+.toggle{width:35px;height:19px;background:#cbd5e1;border-radius:999px;position:relative;cursor:pointer;border:none;transition:background .2s;flex-shrink:0}
+.toggle.on{background:var(--accent)}
+.toggle::after{content:'';position:absolute;top:2px;left:2px;width:15px;height:15px;background:#fff;border-radius:50%;transition:transform .2s}
+.toggle.on::after{transform:translateX(16px)}
+.tlabel{font-size:.72rem;color:var(--muted)}
+
+/* HEALTH */
+.health-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px}
+.hcard{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:15px;position:relative;overflow:hidden}
+.hcard::before{content:'';position:absolute;top:0;left:0;right:0;height:4px}
+.score-wrap{width:76px;height:76px;margin:0 auto 9px;position:relative}
+.score-wrap svg{transform:rotate(-90deg)}
+.score-text{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center}
+.score-num{font-size:1.3rem;font-weight:800}
+.score-grade{font-size:.62rem;font-weight:700;margin-top:-2px}
+.hcard h4{font-size:.82rem;font-weight:700;text-align:center;margin-bottom:9px}
+.sub-scores{display:flex;flex-direction:column;gap:5px;margin-bottom:9px}
+.sub-row{display:flex;justify-content:space-between;align-items:center;font-size:.71rem}
+.sub-bar{flex:1;height:4px;background:#e2e8f0;border-radius:999px;margin:0 7px}
+.sub-fill{height:100%;border-radius:999px;transition:width .5s}
+.flag-list{display:flex;flex-direction:column;gap:3px}
+.flag{font-size:.67rem;padding:2px 7px;border-radius:5px;font-weight:600}
+.f-ok{background:#dcfce7;color:#166534}
+.f-warn{background:#fef9c3;color:#854d0e}
+.f-danger{background:#fee2e2;color:#991b1b}
+
+/* TREND */
+.trend-wrap{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:18px;margin-bottom:14px}
+.trend-wrap canvas{height:210px!important}
+.pred-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(198px,1fr));gap:10px}
+.pcard{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:13px}
+.pcard .elbl{font-size:.7rem;font-weight:700;padding:2px 7px;border-radius:4px;color:#fff;display:inline-block;margin-bottom:7px}
+.prow{display:flex;justify-content:space-between;font-size:.77rem;padding:3px 0;border-bottom:1px solid var(--border)}
+.prow:last-child{border:none}
+.pval{font-weight:700}
+.tbadge{font-size:.76rem;padding:2px 7px;border-radius:999px;font-weight:700}
+.t-up{background:#dcfce7;color:#166534}
+.t-stable{background:#e0f2fe;color:#075985}
+.t-down{background:#fee2e2;color:#991b1b}
+
+/* CALENDAR */
+.cal-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:9px}
+@media(max-width:580px){.cal-grid{grid-template-columns:repeat(3,1fr)}}
+.cal-cell{background:var(--card);border:1px solid var(--border);border-radius:11px;padding:10px;min-height:80px}
+.cal-cell.has-i{border-color:#bae6fd;background:#f0f9ff}
+.cal-mo{font-weight:800;font-size:.82rem;margin-bottom:5px;color:var(--muted)}
+.cal-etfs{display:flex;flex-direction:column;gap:3px}
+.cetag{font-size:.66rem;font-weight:700;padding:2px 6px;border-radius:4px;color:#fff}
+.cal-empty{font-size:.66rem;color:#cbd5e1}
+
+/* ALLOC */
+.atbl{width:100%;border-collapse:collapse}
+.atbl th{background:#f8fafc;padding:8px 12px;text-align:left;font-size:.74rem;color:var(--muted);font-weight:600;border-bottom:2px solid var(--border)}
+.atbl td{padding:8px 12px;border-bottom:1px solid var(--border);font-size:.83rem;vertical-align:middle}
+.atbl tr:last-child td{border-bottom:none}
+.abar{display:flex;align-items:center;gap:8px}
+.abar input[type=range]{flex:1;accent-color:var(--accent);cursor:pointer}
+.apct{width:48px;border:1px solid var(--border);border-radius:7px;padding:3px 6px;text-align:center;font-size:.78rem;color:var(--text)}
+.apct:focus{outline:none;border-color:var(--accent)}
+.atot td{font-weight:700;background:#f8fafc}
+.pok{color:#22c55e}.pwarn{color:#ef4444}
+
+/* STATS */
+.stats-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(165px,1fr));gap:10px;margin-bottom:18px}
+.scard{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:14px 16px}
+.scard .slbl{font-size:.7rem;color:var(--muted);margin-bottom:3px}
+.scard .sval{font-size:1.2rem;font-weight:800}
+.scard .ssub{font-size:.68rem;color:var(--muted);margin-top:2px}
+
+/* MONTH TABLE */
+.mtbl{width:100%;border-collapse:collapse}
+.mtbl th{background:#f8fafc;padding:8px 12px;font-size:.73rem;color:var(--muted);font-weight:600;border-bottom:2px solid var(--border);text-align:right}
+.mtbl th:first-child{text-align:left}
+.mtbl td{padding:8px 12px;border-bottom:1px solid var(--border);font-size:.82rem;text-align:right}
+.mtbl td:first-child{text-align:left;font-weight:600}
+.hit{color:#22c55e;font-weight:700}.miss{color:#f97316}
+
+/* NOTES */
+.notes{background:#fefce8;border:1px solid #fde68a;border-radius:14px;padding:14px 17px;font-size:.78rem;color:#78350f;line-height:1.7}
+.notes strong{color:#92400e}
+.notes ul{padding-left:15px;margin-top:5px}
+.drow{display:flex;flex-wrap:wrap;gap:6px;margin-top:7px}
+.dlink{font-size:.7rem;background:#fff;border:1px solid #fde68a;border-radius:7px;padding:3px 10px;color:#92400e;text-decoration:none}
+.dlink:hover{background:#fef9c3}
+footer{text-align:center;font-size:.7rem;color:var(--muted);padding:16px;border-top:1px solid var(--border)}
+.fstamp{display:inline-block;background:#e0f2fe;border:1px solid #bae6fd;border-radius:999px;padding:2px 10px;font-size:.68rem;color:#0369a1;margin-left:6px}
+
+@media(max-width:580px){
+  .hero h1{font-size:1.22rem}
+  .goal-bar{flex-direction:column}
+  .atbl th:nth-child(3),.atbl td:nth-child(3),
+  .atbl th:nth-child(4),.atbl td:nth-child(4){display:none}
+}
+</style>
+</head>
+<body>
+
+<div class="hero">
+  <h1>📈 台灣高股息ETF 月月領息規劃器</h1>
+  <p>智慧配置 0056 · 00878 · 00919 · 00929，全年每月穩定現金流</p>
+  <div class="hero-badges">
+    <span class="hbadge">規模4000億以上 ETF</span>
+    <span class="hbadge green" id="updatedBadge">⏳ 載入中...</span>
+  </div>
+</div>
+
+<!-- TICKER -->
+<div class="ticker-wrap">
+  <div class="ticker"><div class="ticker-inner" id="tickerInner">
+    <span class="t-item" data-id="00919"><span class="t-code">00919</span><span class="t-price">--</span><span class="flat">--</span></span>
+    <span class="t-item" data-id="0056"><span class="t-code">0056</span><span class="t-price">--</span><span class="flat">--</span></span>
+    <span class="t-item" data-id="00878"><span class="t-code">00878</span><span class="t-price">--</span><span class="flat">--</span></span>
+    <span class="t-item" data-id="00929"><span class="t-code">00929</span><span class="t-price">--</span><span class="flat">--</span></span>
+    <span class="t-item" data-id="00713"><span class="t-code">00713</span><span class="t-price">--</span><span class="flat">--</span></span>
+    <span class="t-item" data-id="00919b"><span class="t-code">00919</span><span class="t-price">--</span><span class="flat">--</span></span>
+    <span class="t-item" data-id="0056b"><span class="t-code">0056</span><span class="t-price">--</span><span class="flat">--</span></span>
+    <span class="t-item" data-id="00878b"><span class="t-code">00878</span><span class="t-price">--</span><span class="flat">--</span></span>
+    <span class="t-item" data-id="00929b"><span class="t-code">00929</span><span class="t-price">--</span><span class="flat">--</span></span>
+    <span class="t-item" data-id="00713b"><span class="t-code">00713</span><span class="t-price">--</span><span class="flat">--</span></span>
+  </div></div>
+  <div class="ticker-bar">
+    <span><span class="dot dot-cached" id="statusDot"></span><span id="statusTxt">載入股價中...</span></span>
+    <button class="btn btn-outline btn-sm" onclick="fetchLivePrices()">↻ 更新</button>
+  </div>
+</div>
+
+<div class="container">
+
+<!-- GOAL -->
+<section>
+  <div class="sec-title">🎯 目標設定</div>
+  <div class="card goal-bar">
+    <div>
+      <label>每月目標領息（元）</label>
+      <input type="number" id="targetIncome" value="50000" min="1000" step="1000" oninput="recalcAll()">
+    </div>
+    <button class="btn btn-gold" onclick="autoBalance()">✨ 智慧均衡配置</button>
+    <button class="btn btn-outline" onclick="resetToDefault()">↺ 重置</button>
+    <div class="goal-result">
+      <div><div class="lbl">預估所需總投入</div><div class="val" id="totalInvDisp">—</div></div>
+      <div><div class="lbl">平均月實領（估）</div><div class="val" id="avgMonthDisp">—</div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ETF CARDS -->
+<section>
+  <div class="sec-title">📊 ETF 基本資料 <small>股價每日自動更新 · 可手動修正</small></div>
+  <div class="etf-grid" id="etfCards"></div>
+</section>
+
+<!-- HEALTH DASHBOARD -->
+<section>
+  <div class="sec-title">🏥 ETF 健康評估 <small>根據近8期配息自動計算（滿分100）</small></div>
+  <div class="health-grid" id="healthGrid"></div>
+</section>
+
+<!-- TREND & PREDICTION -->
+<section>
+  <div class="sec-title">📉 配息趨勢 &amp; 未來預測 <small>線性趨勢推算，虛線為預測值，僅供參考</small></div>
+  <div class="trend-wrap"><canvas id="trendChart"></canvas></div>
+  <div class="pred-grid" id="predGrid"></div>
+</section>
+
+<!-- CALENDAR -->
+<section>
+  <div class="sec-title">📅 配息月曆</div>
+  <div class="cal-grid" id="calGrid"></div>
+</section>
+
+<!-- ALLOCATION -->
+<section>
+  <div class="sec-title">⚖️ 持股比例配置 <small>合計需等於 100%</small></div>
+  <div style="overflow-x:auto">
+    <table class="atbl">
+      <thead><tr><th>ETF</th><th>配置比例</th><th>建議投入（元）</th><th>持股（張）</th><th>年化收益（估）</th></tr></thead>
+      <tbody id="allocBody"></tbody>
+      <tfoot><tr class="atot"><td>合計</td><td id="totPct">0%</td><td id="totInv">—</td><td>—</td><td id="totAnn">—</td></tr></tfoot>
+    </table>
+  </div>
+</section>
+
+<!-- RESULTS -->
+<section>
+  <div class="sec-title">💰 每月預估領息試算</div>
+  <div class="stats-grid" id="statsGrid"></div>
+  <div class="card" style="padding:16px;margin-bottom:14px"><canvas id="monthChart" style="height:240px!important"></canvas></div>
+  <div style="overflow-x:auto">
+    <table class="mtbl">
+      <thead><tr><th>月份</th><th>配息ETF</th><th>預估領息</th><th>達標狀況</th></tr></thead>
+      <tbody id="monthTbody"></tbody>
+    </table>
+  </div>
+</section>
+
+<!-- NOTES -->
+<section>
+  <div class="notes">
+    <strong>⚠️ 重要說明</strong>
+    <ul>
+      <li>股價每日由 GitHub Actions 自動從 Yahoo Finance 抓取並更新。</li>
+      <li>配息金額每日由自動腳本從 MoneyDJ 爬取，最新更新時間見頂部標籤。</li>
+      <li>健康評分與趨勢預測基於歷史數據，<strong>不代表未來表現</strong>，僅供學習參考。</li>
+      <li>本工具不構成任何投資建議，投資前請自行評估風險承受能力。</li>
+    </ul>
+    <div class="drow">
+      <a class="dlink" href="https://www.moneydj.com/ETF/X/Basic/Basic0005.xdjhtm?etfid=00919.TW" target="_blank">MoneyDJ 00919</a>
+      <a class="dlink" href="https://www.moneydj.com/ETF/X/Basic/Basic0005.xdjhtm?etfid=0056.TW" target="_blank">MoneyDJ 0056</a>
+      <a class="dlink" href="https://www.moneydj.com/ETF/X/Basic/Basic0005.xdjhtm?etfid=00878.TW" target="_blank">MoneyDJ 00878</a>
+      <a class="dlink" href="https://www.moneydj.com/ETF/X/Basic/Basic0005.xdjhtm?etfid=00929.TW" target="_blank">MoneyDJ 00929</a>
+    </div>
+  </div>
+</section>
+</div>
+
+<footer>台灣高股息ETF月月領息規劃器 · 資料每日自動更新 · 僅供學習參考 <span class="fstamp" id="fStamp">載入中</span></footer>
+
+<script>
+/* ═══════════════════════════════════════
+   ETF DATA — auto-updated daily by GitHub Actions
+   ═══════════════════════════════════════ */
+// <<AUTO_UPDATE_START>>
+const LAST_UPDATED = "2026-04-13";
+const ETF_DB = [
+  {id:'00919',name:'群益台灣精選高息',price:24.2,yield:10.9,fundSize:4200,frequency:'quarterly',payMonths:[1,4,7,10],color:'#22c55e',enabled:true,
+   dividendHistory:[{label:'2026Q1',amount:0.78},{label:'2025Q4',amount:0.54},{label:'2025Q3',amount:0.54},{label:'2025Q2',amount:0.72},{label:'2025Q1',amount:0.72},{label:'2024Q4',amount:0.72},{label:'2024Q3',amount:0.72},{label:'2024Q2',amount:0.70}]},
+  {id:'0056',name:'元大高股息',price:38.0,yield:10.0,fundSize:4600,frequency:'quarterly',payMonths:[2,5,8,11],color:'#3b82f6',enabled:true,
+   dividendHistory:[{label:'2026Q2',amount:1.00},{label:'2025Q4+',amount:0.866},{label:'2025Q3',amount:0.866},{label:'2025Q2',amount:0.866},{label:'2025Q1',amount:1.07},{label:'2024Q4',amount:1.07},{label:'2024Q3',amount:1.07},{label:'2024Q2',amount:1.07}]},
+  {id:'00878',name:'國泰永續高股息',price:22.9,yield:7.3,fundSize:5800,frequency:'quarterly',payMonths:[3,6,9,12],color:'#f97316',enabled:true,
+   dividendHistory:[{label:'2026Q1',amount:0.42},{label:'2025Q4',amount:0.40},{label:'2025Q3',amount:0.40},{label:'2025Q2',amount:0.47},{label:'2025Q1',amount:0.50},{label:'2024Q4',amount:0.55},{label:'2024Q3',amount:0.55},{label:'2024Q2',amount:0.51}]},
+  {id:'00929',name:'復華台灣科技優息',price:19.0,yield:7.3,fundSize:4000,frequency:'monthly',payMonths:[1,2,3,4,5,6,7,8,9,10,11,12],color:'#a855f7',enabled:false,
+   dividendHistory:[{label:'2026/04',amount:0.13},{label:'2026/03',amount:0.11},{label:'2026/02',amount:0.10},{label:'2026/01',amount:0.09},{label:'2025/12',amount:0.09},{label:'2025/11',amount:0.07},{label:'2025/10',amount:0.07},{label:'2025/09',amount:0.06}]},
+  {id:'00713',name:'元大台灣高息低波',price:53.8,yield:6.5,fundSize:2400,frequency:'quarterly',payMonths:[1,4,7,10],color:'#ef4444',enabled:false,
+   dividendHistory:[{label:'2026Q1',amount:0.78},{label:'2025Q4',amount:0.78},{label:'2025Q3',amount:0.78},{label:'2025Q2',amount:1.10},{label:'2025Q1',amount:1.40},{label:'2024Q4',amount:1.40},{label:'2024Q3',amount:1.50},{label:'2024Q2',amount:1.50}]}
+];
+// <<AUTO_UPDATE_END>>
+
+const MO=['1月','2月','3月','4月','5月','6月','7月','8月','9月','10月','11月','12月'];
+let chartMo=null, chartTrend=null;
+
+/* ─── LIVE PRICE ─── */
+async function fetchLivePrices(){
+  const syms=ETF_DB.map(e=>e.id+'.TW').join(',');
+  const url=`https://query1.finance.yahoo.com/v8/finance/quote?symbols=${syms}`;
+  const proxy=`https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
+  let res=null;
+  try{const r=await fetch(url,{signal:AbortSignal.timeout(5000)});if(r.ok){const d=await r.json();res=d.quoteResponse?.result}}catch{}
+  if(!res){try{const r=await fetch(proxy,{signal:AbortSignal.timeout(9000)});if(r.ok){const d=await r.json();res=d.quoteResponse?.result}}catch{}}
+  if(res?.length){
+    res.forEach(q=>{
+      const id=q.symbol.replace('.TW','');
+      const e=ETF_DB.find(x=>x.id===id);
+      if(!e) return;
+      e.price=q.regularMarketPrice||e.price;
+      e.priceChg=q.regularMarketChangePercent;
+      // recalc yield from live price
+      const rec=e.dividendHistory.slice(0,e.frequency==='monthly'?3:4);
+      const avg=rec.reduce((s,d)=>s+d.amount,0)/rec.length;
+      const perYear=e.frequency==='monthly'?12:4;
+      e.yield=e.price>0?Math.round(avg*perYear/e.price*1000)/10:e.yield;
+    });
+    updateTicker(res,'live');
+    renderETFCards();recalcAll();
+  } else {
+    updateTicker(null,'cached');
+  }
+}
+
+function updateTicker(res,mode){
+  if(mode==='live'&&res){
+    res.forEach(q=>{
+      const id=q.symbol.replace('.TW','');
+      const price=(q.regularMarketPrice||0).toFixed(2);
+      const chg=q.regularMarketChangePercent;
+      const cls=chg>0?'up':chg<0?'down':'flat';
+      const chgStr=(chg>0?'+':'')+chg.toFixed(2)+'%';
+      document.querySelectorAll(`[data-id="${id}"], [data-id="${id}b"]`).forEach(el=>{
+        el.querySelector('.t-price').textContent=price;
+        const c=el.querySelector('.up, .down, .flat');
+        if(c){c.textContent=chgStr;c.className=cls}
+      });
+    });
+    document.getElementById('statusDot').className='dot dot-live';
+    document.getElementById('statusTxt').textContent=`即時股價 · ${new Date().toLocaleTimeString('zh-TW')}`;
+  } else {
+    ETF_DB.forEach(e=>{
+      document.querySelectorAll(`[data-id="${e.id}"], [data-id="${e.id}b"]`).forEach(el=>{
+        el.querySelector('.t-price').textContent=e.price.toFixed(2);
+        const c=el.querySelector('.up,.down,.flat');if(c){c.textContent='快取';c.className='flat'}
+      });
+    });
+    document.getElementById('statusDot').className='dot dot-cached';
+    document.getElementById('statusTxt').textContent=`快取股價 (${LAST_UPDATED}) · 即時抓取失敗`;
+  }
+}
+
+/* ─── HEALTH SCORE ─── */
+function healthScore(etf){
+  const h=[...etf.dividendHistory].reverse().map(d=>d.amount);
+  const n=h.length,mean=h.reduce((a,b)=>a+b,0)/n;
+  const std=Math.sqrt(h.reduce((s,v)=>s+Math.pow(v-mean,2),0)/n);
+  const cv=mean>0?std/mean:1;
+  const stab=cv<0.05?35:cv<0.10?28:cv<0.15?21:cv<0.25?14:7;
+  const r4=h.slice(-4).reduce((a,b)=>a+b,0)/4,p4=h.slice(0,4).reduce((a,b)=>a+b,0)/4;
+  const tpct=p4>0?(r4-p4)/p4*100:0;
+  const trend=tpct>5?30:tpct>0?24:tpct>-5?16:8;
+  const tdir=tpct>1?'up':tpct<-1?'down':'stable';
+  const ys=etf.yield>=10?20:etf.yield>=8?16:etf.yield>=6?12:etf.yield>=4?8:4;
+  const ss=etf.fundSize>=5000?15:etf.fundSize>=4000?12:etf.fundSize>=2000?9:6;
+  const tot=stab+trend+ys+ss;
+  const grade=tot>=85?'AAA':tot>=70?'AA':tot>=55?'A':tot>=40?'B':'C';
+  const gc=tot>=85?'#22c55e':tot>=70?'#3b82f6':tot>=55?'#f59e0b':tot>=40?'#f97316':'#ef4444';
+  const flags=[];
+  if(cv>0.2)flags.push({t:'warn',s:'配息波動偏高'});
+  if(tpct<-10)flags.push({t:'danger',s:'配息明顯下滑 ⚠️'});
+  else if(tpct<-3)flags.push({t:'warn',s:'配息小幅下滑'});
+  if(tpct>5)flags.push({t:'ok',s:'配息成長趨勢 ✅'});
+  if(etf.yield>11)flags.push({t:'ok',s:'高殖利率競爭力強'});
+  if(etf.fundSize<3000)flags.push({t:'warn',s:'規模未達4000億'});
+  if(!flags.length)flags.push({t:'ok',s:'各項指標穩定'});
+  return{tot,grade,gc,stab,trend,ys,ss,tdir,tpct,flags};
+}
+
+function renderHealthGrid(){
+  const c=document.getElementById('healthGrid');
+  c.innerHTML=ETF_DB.filter(e=>e.enabled).map(etf=>{
+    const h=healthScore(etf);
+    const r=34,cx=38,cy=38,circ=2*Math.PI*r,dash=`${h.tot/100*circ} ${circ}`;
+    const tl=h.tdir==='up'?'上升 📈':h.tdir==='down'?'下降 📉':'持平 ➡️';
+    const tc=h.tdir==='up'?'t-up':h.tdir==='down'?'t-down':'t-stable';
+    return `<div class="hcard" style="--top-color:${etf.color};border-top:4px solid ${etf.color}">
+      <div class="score-wrap">
+        <svg width="76" height="76" viewBox="0 0 76 76">
+          <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="#e2e8f0" stroke-width="8"/>
+          <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${h.gc}" stroke-width="8" stroke-dasharray="${dash}" stroke-linecap="round"/>
+        </svg>
+        <div class="score-text"><div class="score-num" style="color:${h.gc}">${h.tot}</div><div class="score-grade" style="color:${h.gc}">${h.grade}</div></div>
+      </div>
+      <h4><span style="background:${etf.color};color:#fff;border-radius:4px;padding:1px 6px;font-size:.7rem">${etf.id}</span> ${etf.name}</h4>
+      <div class="sub-scores">
+        <div class="sub-row"><span>穩定性</span><div class="sub-bar"><div class="sub-fill" style="width:${h.stab/35*100}%;background:${etf.color}"></div></div><span>${h.stab}/35</span></div>
+        <div class="sub-row"><span>趨&ensp;勢</span><div class="sub-bar"><div class="sub-fill" style="width:${h.trend/30*100}%;background:${etf.color}"></div></div><span>${h.trend}/30</span></div>
+        <div class="sub-row"><span>殖利率</span><div class="sub-bar"><div class="sub-fill" style="width:${h.ys/20*100}%;background:${etf.color}"></div></div><span>${h.ys}/20</span></div>
+        <div class="sub-row"><span>規&ensp;模</span><div class="sub-bar"><div class="sub-fill" style="width:${h.ss/15*100}%;background:${etf.color}"></div></div><span>${h.ss}/15</span></div>
+      </div>
+      <div style="margin-bottom:6px"><span class="tbadge ${tc}">${tl}</span></div>
+      <div class="flag-list">${h.flags.map(f=>`<div class="flag f-${f.t}">${f.s}</div>`).join('')}</div>
+    </div>`;
+  }).join('');
+}
+
+/* ─── REGRESSION ─── */
+function linReg(ys){
+  const n=ys.length;let sx=0,sy=0,sxy=0,sx2=0;
+  ys.forEach((y,i)=>{sx+=i;sy+=y;sxy+=i*y;sx2+=i*i});
+  const s=(n*sxy-sx*sy)/(n*sx2-sx*sx)||0;
+  return{slope:s,intercept:(sy-s*sx)/n};
+}
+
+/* ─── TREND CHART ─── */
+function renderTrendChart(){
+  const ctx=document.getElementById('trendChart').getContext('2d');
+  if(chartTrend)chartTrend.destroy();
+  const active=ETF_DB.filter(e=>e.enabled);
+  const proj=4;
+  const datasets=[];
+  active.forEach(etf=>{
+    const ys=[...etf.dividendHistory].reverse().map(d=>d.amount);
+    const{slope,intercept}=linReg(ys);
+    const last=ys.length-1;
+    const predicted=Array.from({length:proj},(_,i)=>Math.max(0,parseFloat((intercept+slope*(last+i+1)).toFixed(4))));
+    datasets.push({label:etf.id,data:[...ys,...Array(proj).fill(null)],borderColor:etf.color,backgroundColor:etf.color+'1a',borderWidth:2,pointRadius:3,tension:.35,fill:false});
+    datasets.push({label:`${etf.id}預測`,data:[...Array(ys.length-1).fill(null),ys[last],...predicted],borderColor:etf.color,backgroundColor:'transparent',borderWidth:1.5,borderDash:[5,4],pointRadius:2,pointStyle:'triangle',tension:.35,fill:false});
+  });
+  const base=active[0]||ETF_DB[0];
+  const hL=[...base.dividendHistory].reverse().map(d=>d.label);
+  const pL=['預+1','預+2','預+3','預+4'].slice(0,proj);
+  chartTrend=new Chart(ctx,{type:'line',data:{labels:[...hL,...pL],datasets},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'top',labels:{font:{size:11},filter:i=>!i.text.includes('預測')}},tooltip:{callbacks:{label:c=>`${c.dataset.label}: ${c.parsed.y!=null?'$'+c.parsed.y:'—'}`}}},scales:{x:{grid:{color:'#f1f5f9'}},y:{ticks:{callback:v=>'$'+v},grid:{color:'#f1f5f9'}}}}});
+}
+
+/* ─── PREDICTION CARDS ─── */
+function renderPredGrid(){
+  const c=document.getElementById('predGrid');
+  c.innerHTML=ETF_DB.filter(e=>e.enabled).map(etf=>{
+    const ys=[...etf.dividendHistory].reverse().map(d=>d.amount);
+    const{slope,intercept}=linReg(ys);
+    const nxt=Math.max(0,intercept+slope*ys.length);
+    const annDiv=etf.frequency==='monthly'?nxt*12:nxt*4;
+    const pYield=etf.price>0?Math.round(annDiv/etf.price*1000)/10:0;
+    const h=healthScore(etf);
+    const tc=h.tdir==='up'?'t-up':h.tdir==='down'?'t-down':'t-stable';
+    const tl=h.tdir==='up'?`+${h.tpct.toFixed(1)}% ↑`:h.tdir==='down'?`${h.tpct.toFixed(1)}% ↓`:'持平';
+    return `<div class="pcard">
+      <span class="elbl" style="background:${etf.color}">${etf.id} ${etf.name}</span>
+      <div class="prow"><span>配息趨勢</span><span class="pval"><span class="tbadge ${tc}" style="font-size:.68rem">${tl}</span></span></div>
+      <div class="prow"><span>下期預估配息</span><span class="pval">$${nxt.toFixed(3)}</span></div>
+      <div class="prow"><span>預估年化殖利率</span><span class="pval" style="color:${etf.color}">${pYield}%</span></div>
+      <div class="prow"><span>健康評分</span><span class="pval" style="color:${h.gc}">${h.tot}分 (${h.grade})</span></div>
+      <div class="prow"><span>主要風險</span><span class="pval" style="font-size:.7rem">${h.flags.find(f=>f.t!=='ok')?.s||'無明顯風險'}</span></div>
+    </div>`;
+  }).join('');
+}
+
+/* ─── CALENDAR ─── */
+function renderCalendar(){
+  const mi=calcMI();
+  document.getElementById('calGrid').innerHTML=MO.map((m,i)=>{
+    const paying=ETF_DB.filter(e=>e.enabled&&e.payMonths.includes(i+1));
+    const inc=mi[i];
+    return `<div class="cal-cell ${paying.length?'has-i':''}">
+      <div class="cal-mo">${m}</div>
+      <div class="cal-etfs">
+        ${paying.map(e=>`<div class="cetag" style="background:${e.color}">${e.id}</div>`).join('')||'<span class="cal-empty">無配息</span>'}
+        ${inc>0?`<div style="font-size:.66rem;color:#0284c7;margin-top:3px;font-weight:700">合計 $${fmt(Math.round(inc))}</div>`:''}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+/* ─── ETF CARDS ─── */
+function renderETFCards(){
+  document.getElementById('etfCards').innerHTML=ETF_DB.map(etf=>{
+    const h=etf.enabled?healthScore(etf):null;
+    const hm=h?`<div class="health-mini" style="background:${h.gc}18;color:${h.gc}">健康 ${h.tot}分 (${h.grade}) · ${h.tdir==='up'?'📈':h.tdir==='down'?'📉':'➡️'}</div>`:'';
+    const chg=etf.priceChg;
+    const cs=chg>0?'#22c55e':chg<0?'#ef4444':'#94a3b8';
+    const chgStr=chg!=null?(chg>0?'+':'')+chg.toFixed(2)+'%':'';
+    return `<div class="etf-card ${etf.enabled?'active':''}" style="border-color:${etf.enabled?etf.color:'var(--border)'}">
+      <div class="toggle-wrap">
+        <button class="toggle ${etf.enabled?'on':''}" onclick="toggleETF('${etf.id}')"></button>
+        <span class="tlabel">${etf.enabled?'已納入':'未納入'}</span>
+      </div>
+      <span class="badge-code" style="background:${etf.color}">${etf.id}</span>
+      <h3>${etf.name}</h3>
+      <div class="etf-yield" style="color:${etf.color}">
+        ${etf.yield}%
+        <span class="price-lbl">$${etf.price.toFixed(2)}</span>
+        ${chgStr?`<span class="price-chg" style="color:${cs}">${chgStr}</span>`:''}
+      </div>
+      <div class="meta">${etf.frequency==='monthly'?'月配息':'季配息'}·${etf.fundSize}億${etf.fundSize>=4000?' ✓':' ⚠'}</div>
+      <div class="months">${etf.payMonths.map(m=>`<span class="mchip" style="background:${etf.color}">${m}月</span>`).join('')}</div>
+      ${hm}
+      <div class="edit-row">
+        <div style="flex:1"><label>股價（元）</label><input type="number" step=".1" value="${etf.price}" oninput="updateETF('${etf.id}','price',this.value)"></div>
+        <div style="flex:1"><label>殖利率（%）</label><input type="number" step=".1" value="${etf.yield}" oninput="updateETF('${etf.id}','yield',this.value)"></div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+/* ─── ALLOC & INCOME ─── */
+function calcMI(){
+  const tot=getTotInv(),mi=Array(12).fill(0);
+  ETF_DB.filter(e=>e.enabled).forEach(etf=>{
+    const inv=tot*(etf.allocation||0)/100,ann=inv*etf.yield/100;
+    if(etf.frequency==='monthly')for(let i=0;i<12;i++)mi[i]+=ann/12;
+    else etf.payMonths.forEach(m=>mi[m-1]+=ann/4);
+  });
+  return mi;
+}
+function getTotInv(){const wy=getWY();return wy>0?(parseFloat(document.getElementById('targetIncome')?.value)||50000)*12/wy:0}
+function getWY(){return ETF_DB.filter(e=>e.enabled).reduce((s,e)=>s+(e.allocation||0)/100*e.yield/100,0)||0.01}
+
+function renderAlloc(){
+  const act=ETF_DB.filter(e=>e.enabled),tot=getTotInv();
+  if(!act.length){document.getElementById('allocBody').innerHTML='<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:14px">請啟用至少一個ETF</td></tr>';return}
+  document.getElementById('allocBody').innerHTML=act.map(etf=>{
+    const inv=tot*(etf.allocation||0)/100,shr=inv>0?Math.floor(inv/etf.price/1000):0,ann=inv*etf.yield/100;
+    return `<tr>
+      <td><span style="display:inline-block;width:9px;height:9px;background:${etf.color};border-radius:2px;margin-right:5px"></span><strong>${etf.id}</strong> ${etf.name}</td>
+      <td><div class="abar"><input type="range" min="0" max="100" step="1" value="${etf.allocation||0}" style="accent-color:${etf.color}" oninput="setAlloc('${etf.id}',+this.value);document.getElementById('pct${etf.id}').value=this.value" id="rng${etf.id}"><input type="number" class="apct" min="0" max="100" step="1" value="${etf.allocation||0}" oninput="setAlloc('${etf.id}',+this.value);document.getElementById('rng${etf.id}').value=this.value" id="pct${etf.id}">%</div></td>
+      <td>${inv>0?fmt(Math.round(inv)):'—'}</td>
+      <td>${shr>0?shr+' 張':'—'}</td>
+      <td>${ann>0?fmt(Math.round(ann)):'—'}</td>
+    </tr>`;
+  }).join('');
+  const tp=act.reduce((s,e)=>s+(e.allocation||0),0);
+  const pc=document.getElementById('totPct');
+  pc.textContent=tp.toFixed(1)+'%';pc.className=Math.abs(tp-100)<0.5?'pok':'pwarn';
+  document.getElementById('totInv').textContent=fmt(Math.round(act.reduce((s,e)=>s+tot*(e.allocation||0)/100,0)));
+  document.getElementById('totAnn').textContent=fmt(Math.round(act.reduce((s,e)=>s+tot*(e.allocation||0)/100*e.yield/100,0)));
+}
+
+function updateStats(){
+  const tgt=parseFloat(document.getElementById('targetIncome').value)||50000;
+  const tot=getTotInv(),mi=calcMI(),ann=mi.reduce((a,b)=>a+b,0);
+  document.getElementById('totalInvDisp').textContent=tot>0?'$'+fmt(Math.round(tot)):'—';
+  document.getElementById('avgMonthDisp').textContent='$'+fmt(Math.round(ann/12));
+  const met=mi.filter(v=>v>=tgt*0.9).length;
+  document.getElementById('statsGrid').innerHTML=`
+    <div class="scard"><div class="slbl">目標月收入</div><div class="sval" style="color:#0ea5e9">$${fmt(tgt)}</div><div class="ssub">每月領息目標</div></div>
+    <div class="scard"><div class="slbl">所需總投資</div><div class="sval">$${tot>0?fmt(Math.round(tot)):'—'}</div><div class="ssub">依估算殖利率</div></div>
+    <div class="scard"><div class="slbl">預估年化收益</div><div class="sval" style="color:#22c55e">$${fmt(Math.round(ann))}</div><div class="ssub">月均 $${fmt(Math.round(ann/12))}</div></div>
+    <div class="scard"><div class="slbl">達標月份</div><div class="sval">${met} / 12</div><div class="ssub">≥目標90%計算</div></div>`;
+}
+
+function renderMonthChart(){
+  const ctx=document.getElementById('monthChart').getContext('2d');
+  const tgt=parseFloat(document.getElementById('targetIncome').value)||50000;
+  const tot=getTotInv();
+  const ds=ETF_DB.filter(e=>e.enabled).map(etf=>{
+    const inv=tot*(etf.allocation||0)/100,ann=inv*etf.yield/100,data=Array(12).fill(0);
+    if(etf.frequency==='monthly')for(let i=0;i<12;i++)data[i]=Math.round(ann/12);
+    else etf.payMonths.forEach(m=>data[m-1]=Math.round(ann/4));
+    return{label:etf.id,data,backgroundColor:etf.color+'bb',borderColor:etf.color,borderWidth:1,borderRadius:3};
+  });
+  ds.push({label:'目標線',data:Array(12).fill(tgt),type:'line',borderColor:'#f43f5e',borderWidth:2,borderDash:[6,4],pointRadius:0,fill:false});
+  if(chartMo)chartMo.destroy();
+  chartMo=new Chart(ctx,{type:'bar',data:{labels:MO,datasets:ds},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'top',labels:{font:{size:11}}},tooltip:{callbacks:{label:c=>`${c.dataset.label}: $${fmt(c.parsed.y)}`}}},scales:{x:{stacked:true,grid:{display:false}},y:{stacked:true,ticks:{callback:v=>'$'+fmtS(v)}}}}});
+}
+
+function renderMonthTable(){
+  const tgt=parseFloat(document.getElementById('targetIncome').value)||50000,mi=calcMI();
+  document.getElementById('monthTbody').innerHTML=MO.map((m,i)=>{
+    const inc=mi[i],paying=ETF_DB.filter(e=>e.enabled&&e.payMonths.includes(i+1));
+    const hit=inc>=tgt*0.9,pct=inc>0?Math.round(inc/tgt*100):0;
+    const tags=paying.map(e=>`<span style="background:${e.color};color:#fff;font-size:.67rem;padding:2px 6px;border-radius:4px;font-weight:700">${e.id}</span>`).join(' ');
+    return `<tr><td>${m}</td><td>${tags||'<span style="color:var(--muted);font-size:.78rem">無</span>'}</td>
+      <td class="${inc>0?(hit?'hit':'miss'):''}">${inc>0?'$'+fmt(Math.round(inc)):'—'}</td>
+      <td>${inc>0?`<span style="font-size:.74rem;${hit?'color:#22c55e':'color:#f97316'}">${hit?'✅':'⚠️'} ${pct}%</span>`:'—'}</td></tr>`;
+  }).join('');
+}
+
+/* ─── MAIN RECALC ─── */
+function recalcAll(){
+  renderCalendar();renderAlloc();updateStats();renderMonthChart();renderMonthTable();
+  renderHealthGrid();renderTrendChart();renderPredGrid();
+}
+
+/* ─── AUTO BALANCE ─── */
+function autoBalance(){
+  const act=ETF_DB.filter(e=>e.enabled);
+  if(!act.length)return;
+  const tgt=parseFloat(document.getElementById('targetIncome').value)||50000;
+  const inv={};
+  act.forEach(e=>{inv[e.id]=(tgt*e.payMonths.length)/(e.yield/100)});
+  const sum=Object.values(inv).reduce((a,b)=>a+b,0);
+  act.forEach(e=>{e.allocation=Math.round(inv[e.id]/sum*1000)/10});
+  const diff=100-act.reduce((s,e)=>s+(e.allocation||0),0);
+  if(act.length)act[0].allocation=Math.round((act[0].allocation+diff)*10)/10;
+  recalcAll();
+}
+
+/* ─── HANDLERS ─── */
+function toggleETF(id){const e=ETF_DB.find(x=>x.id===id);e.enabled=!e.enabled;if(!e.enabled)e.allocation=0;renderETFCards();recalcAll()}
+function updateETF(id,f,v){const e=ETF_DB.find(x=>x.id===id);e[f]=parseFloat(v)||e[f];recalcAll()}
+function setAlloc(id,v){const e=ETF_DB.find(x=>x.id===id);e.allocation=Math.max(0,Math.min(100,v||0));recalcAll()}
+function resetToDefault(){
+  ETF_DB[0].enabled=true;ETF_DB[0].allocation=28;
+  ETF_DB[1].enabled=true;ETF_DB[1].allocation=30;
+  ETF_DB[2].enabled=true;ETF_DB[2].allocation=42;
+  ETF_DB[3].enabled=false;ETF_DB[3].allocation=0;
+  ETF_DB[4].enabled=false;ETF_DB[4].allocation=0;
+  document.getElementById('targetIncome').value=50000;
+  renderETFCards();recalcAll();
+}
+function fmt(n){return n.toLocaleString('zh-TW')}
+function fmtS(n){return n>=10000?(n/10000).toFixed(1)+'萬':n.toLocaleString('zh-TW')}
+
+/* ─── INIT ─── */
+ETF_DB[0].allocation=28;ETF_DB[1].allocation=30;ETF_DB[2].allocation=42;
+document.addEventListener('DOMContentLoaded',()=>{
+  const s=`📅 配息更新：${LAST_UPDATED}`;
+  document.getElementById('updatedBadge').textContent=s;
+  document.getElementById('fStamp').textContent=s;
+  renderETFCards();recalcAll();
+  setTimeout(fetchLivePrices,600);
+  setInterval(fetchLivePrices,300000);
+});
+</script>
+</body>
+</html>
