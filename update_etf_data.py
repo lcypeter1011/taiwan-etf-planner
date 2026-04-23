@@ -3,11 +3,11 @@
 台灣高股息ETF 每日資料自動更新腳本
 Daily ETF Data Updater — runs via GitHub Actions
 
-修復 v2:
-  - 多端點重試 Yahoo Finance (query1/query2, v8/v7)
-  - yfinance 套件作為備用抓取
-  - 若股價仍為 0，從現有 HTML 讀取舊股價（絕不寫入 0）
-  - 配息抓取失敗時保留 HTML 中原有配息記錄（不清空）
+修復 v3 — 三層備用機制：
+  1. 優先：Yahoo Finance (多端點) / MoneyDJ 即時抓取
+  2. 次要：從現有 HTML 讀取上次成功寫入的值
+  3. 最終：硬編碼 FALLBACK_DIVIDENDS 常數（永不清空配息）
+  配息金額合理性驗證（0.01~10 TWD/unit），防止爬到錯誤欄位
 """
 
 import requests
@@ -42,6 +42,41 @@ ETF_META = {
 
 HTML_PATH = 'index.html'
 
+# ── 最終備用配息資料（硬編碼，當 MoneyDJ 和 HTML 備用均失敗時使用）──
+# 更新此區塊：每次人工確認配息後手動維護
+FALLBACK_DIVIDENDS = {
+    '00919': [
+        {'label':'2026Q1','amount':0.78},{'label':'2025Q4','amount':0.54},
+        {'label':'2025Q3','amount':0.54},{'label':'2025Q2','amount':0.72},
+        {'label':'2025Q1','amount':0.72},{'label':'2024Q4','amount':0.72},
+        {'label':'2024Q3','amount':0.72},{'label':'2024Q2','amount':0.70},
+    ],
+    '0056': [
+        {'label':'2026Q2','amount':1.00},{'label':'2025Q4+','amount':0.866},
+        {'label':'2025Q3','amount':0.866},{'label':'2025Q2','amount':0.866},
+        {'label':'2025Q1','amount':1.07},{'label':'2024Q4','amount':1.07},
+        {'label':'2024Q3','amount':1.07},{'label':'2024Q2','amount':1.07},
+    ],
+    '00878': [
+        {'label':'2026Q1','amount':0.42},{'label':'2025Q4','amount':0.40},
+        {'label':'2025Q3','amount':0.40},{'label':'2025Q2','amount':0.47},
+        {'label':'2025Q1','amount':0.50},{'label':'2024Q4','amount':0.55},
+        {'label':'2024Q3','amount':0.55},{'label':'2024Q2','amount':0.51},
+    ],
+    '00929': [
+        {'label':'2026/04','amount':0.13},{'label':'2026/03','amount':0.11},
+        {'label':'2026/02','amount':0.10},{'label':'2026/01','amount':0.09},
+        {'label':'2025/12','amount':0.09},{'label':'2025/11','amount':0.07},
+        {'label':'2025/10','amount':0.07},{'label':'2025/09','amount':0.06},
+    ],
+    '00713': [
+        {'label':'2026Q1','amount':0.78},{'label':'2025Q4','amount':0.78},
+        {'label':'2025Q3','amount':0.78},{'label':'2025Q2','amount':1.10},
+        {'label':'2025Q1','amount':1.40},{'label':'2024Q4','amount':1.40},
+        {'label':'2024Q3','amount':1.50},{'label':'2024Q2','amount':1.50},
+    ],
+}
+
 # ── 工具函數 ─────────────────────────────────────────────────
 
 def log(msg):
@@ -60,32 +95,36 @@ def safe_float(s):
 
 def get_current_data_from_html(html_path):
     """
-    從現有 index.html 讀取目前的股價與配息記錄。
-    用於：若新抓取失敗，保留原有數值，避免寫入 0 或空陣列。
+    從現有 index.html 讀取股價、殖利率、配息記錄作為備用。
+    只讀取合理的值（price>0, 0.1<yield<50, 有效配息陣列）。
     """
-    current = {etf_id: {'price': 0, 'dividends': []} for etf_id in ETF_META}
+    current = {etf_id: {'price': 0, 'yield': 0, 'dividends': []} for etf_id in ETF_META}
     try:
         with open(html_path, 'r', encoding='utf-8') as f:
             content = f.read()
 
-        # 找 AUTO_UPDATE 區段
         m = re.search(r'// <<AUTO_UPDATE_START>>(.*?)// <<AUTO_UPDATE_END>>', content, re.DOTALL)
         if not m:
             return current
 
         block = m.group(1)
 
-        # 解析每一行 ETF 物件
-        # 格式: {id:'00919',name:'...',price:24.2,yield:10.9,...,dividendHistory:[...]}
         for etf_id in ETF_META:
-            # 取出 price 值
-            price_m = re.search(rf"id:'{re.escape(etf_id)}'.*?price:([\d.]+)", block)
+            # 讀取 price
+            price_m = re.search(rf"id:'{re.escape(etf_id)}'[^}}]*?price:([\d.]+)", block)
             if price_m:
                 p = safe_float(price_m.group(1))
                 if p and p > 0:
                     current[etf_id]['price'] = p
 
-            # 取出 dividendHistory 陣列
+            # 讀取 yield（只接受合理範圍）
+            yield_m = re.search(rf"id:'{re.escape(etf_id)}'[^}}]*?yield:([\d.]+)", block)
+            if yield_m:
+                y = safe_float(yield_m.group(1))
+                if y and 0.1 < y < 50:
+                    current[etf_id]['yield'] = y
+
+            # 讀取 dividendHistory（只接受每單位配息在 0.01~10 TWD 的記錄）
             div_m = re.search(
                 rf"id:'{re.escape(etf_id)}'.*?dividendHistory:(\[.*?\])",
                 block, re.DOTALL
@@ -93,13 +132,16 @@ def get_current_data_from_html(html_path):
             if div_m:
                 try:
                     divs = json.loads(div_m.group(1))
-                    if isinstance(divs, list) and len(divs) > 0:
-                        current[etf_id]['dividends'] = divs
+                    valid = [d for d in divs if isinstance(d.get('amount'), (int, float))
+                             and 0.01 <= d['amount'] <= 10]
+                    if valid:
+                        current[etf_id]['dividends'] = valid
                 except Exception:
                     pass
 
-        log(f'  📂 從 HTML 讀取備用資料：'
-            + ', '.join(f'{k}=${v["price"]}' for k, v in current.items() if v["price"] > 0))
+        log('  📂 HTML 備用資料：'
+            + ', '.join(f"{k} ${v['price']} y={v['yield']}% d={len(v['dividends'])}"
+                        for k, v in current.items()))
     except Exception as e:
         log(f'  ⚠️  讀取備用資料失敗: {e}')
 
@@ -379,31 +421,51 @@ def main():
         log(f'  [{etf_id}] {meta["name"]}...')
         divs = fetch_moneydj_dividends(etf_id)
 
-        # ── 股價：新抓 → HTML 備用，絕不寫 0 ──────────────────
+        # ── 股價：新抓 → HTML 備用（絕不寫 0）─────────────────
         price = prices.get(etf_id, {}).get('price', 0)
         if not price or price <= 0:
             price = fallback[etf_id]['price']
             if price > 0:
                 log(f'    ℹ️  股價使用 HTML 備用值 ${price}')
             else:
-                log(f'    ⚠️  股價完全無法取得（寫入 0，請手動修正）')
+                log(f'    ⚠️  股價完全無法取得（寫入 0）')
 
-        # ── 配息：新抓 → HTML 備用，不清空歷史 ────────────────
+        # ── 配息：新抓 → HTML 備用 → 硬編碼常數（三層，絕不清空）
+        source = 'MoneyDJ'
         if divs:
             log(f'    ✅ 取得 {len(divs)} 筆配息，最新: ${divs[0]["amount"]} ({divs[0]["label"]})')
         else:
             divs = fallback[etf_id]['dividends']
+            source = 'HTML備用'
             if divs:
                 log(f'    ℹ️  配息使用 HTML 備用值（{len(divs)} 筆）')
             else:
-                log(f'    ⚠️  配息完全無法取得')
+                divs = FALLBACK_DIVIDENDS.get(etf_id, [])
+                source = '硬編碼常數'
+                if divs:
+                    log(f'    ℹ️  配息使用硬編碼常數（{len(divs)} 筆）— 請盡快更新 FALLBACK_DIVIDENDS')
+                else:
+                    log(f'    ❌  配息完全無法取得')
 
-        y = calc_yield(divs, price, meta['frequency']) if divs and price else 0
+        # ── 殖利率：計算 → HTML 備用 → 根據硬編碼常數計算 ─────
+        y = calc_yield(divs, price, meta['frequency']) if (divs and price) else 0
+        if not (0.1 <= y <= 50):
+            y = fallback[etf_id].get('yield', 0)
+            if 0.1 <= y <= 50:
+                log(f'    ℹ️  殖利率使用 HTML 備用值 {y}%')
+            else:
+                fb_divs = FALLBACK_DIVIDENDS.get(etf_id, [])
+                y = calc_yield(fb_divs, price, meta['frequency']) if (fb_divs and price) else 0
+                if 0.1 <= y <= 50:
+                    log(f'    ℹ️  殖利率根據硬編碼常數計算 {y}%')
+                else:
+                    log(f'    ⚠️  殖利率無法計算，寫入 0')
 
         all_data[etf_id] = {
             'dividends': divs,
             'price': price,
             'yield': y,
+            '_source': source,
         }
         time.sleep(1.2)
 
