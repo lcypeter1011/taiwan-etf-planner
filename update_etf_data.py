@@ -3,16 +3,11 @@
 台灣高股息ETF 每日資料自動更新腳本
 Daily ETF Data Updater — runs via GitHub Actions
 
-功能:
-  1. 從 Yahoo Finance 抓取最新股價
-  2. 從 MoneyDJ 爬取最新配息記錄（近8期）
-  3. 重新計算年化殖利率
-  4. 更新 index.html 中的資料區塊
-  5. 更新 LAST_UPDATED 日期戳
-
-執行方式:
-  pip install requests beautifulsoup4 lxml
-  python update_etf_data.py
+修復 v2:
+  - 多端點重試 Yahoo Finance (query1/query2, v8/v7)
+  - yfinance 套件作為備用抓取
+  - 若股價仍為 0，從現有 HTML 讀取舊股價（絕不寫入 0）
+  - 配息抓取失敗時保留 HTML 中原有配息記錄（不清空）
 """
 
 import requests
@@ -26,13 +21,15 @@ from bs4 import BeautifulSoup
 
 HEADERS = {
     'User-Agent': (
-        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
+        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) '
         'AppleWebKit/537.36 (KHTML, like Gecko) '
         'Chrome/124.0.0.0 Safari/537.36'
     ),
-    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-    'Accept-Language': 'zh-TW,zh;q=0.9,en;q=0.8',
-    'Referer': 'https://www.moneydj.com/',
+    'Accept': 'application/json,text/html,*/*;q=0.8',
+    'Accept-Language': 'zh-TW,zh;q=0.9,en-US;q=0.8,en;q=0.7',
+    'Accept-Encoding': 'gzip, deflate, br',
+    'Referer': 'https://finance.yahoo.com/',
+    'Cache-Control': 'no-cache',
 }
 
 ETF_META = {
@@ -59,26 +56,126 @@ def safe_float(s):
         return None
 
 
+# ── 從現有 HTML 讀取備用資料 ─────────────────────────────────
+
+def get_current_data_from_html(html_path):
+    """
+    從現有 index.html 讀取目前的股價與配息記錄。
+    用於：若新抓取失敗，保留原有數值，避免寫入 0 或空陣列。
+    """
+    current = {etf_id: {'price': 0, 'dividends': []} for etf_id in ETF_META}
+    try:
+        with open(html_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+
+        # 找 AUTO_UPDATE 區段
+        m = re.search(r'// <<AUTO_UPDATE_START>>(.*?)// <<AUTO_UPDATE_END>>', content, re.DOTALL)
+        if not m:
+            return current
+
+        block = m.group(1)
+
+        # 解析每一行 ETF 物件
+        # 格式: {id:'00919',name:'...',price:24.2,yield:10.9,...,dividendHistory:[...]}
+        for etf_id in ETF_META:
+            # 取出 price 值
+            price_m = re.search(rf"id:'{re.escape(etf_id)}'.*?price:([\d.]+)", block)
+            if price_m:
+                p = safe_float(price_m.group(1))
+                if p and p > 0:
+                    current[etf_id]['price'] = p
+
+            # 取出 dividendHistory 陣列
+            div_m = re.search(
+                rf"id:'{re.escape(etf_id)}'.*?dividendHistory:(\[.*?\])",
+                block, re.DOTALL
+            )
+            if div_m:
+                try:
+                    divs = json.loads(div_m.group(1))
+                    if isinstance(divs, list) and len(divs) > 0:
+                        current[etf_id]['dividends'] = divs
+                except Exception:
+                    pass
+
+        log(f'  📂 從 HTML 讀取備用資料：'
+            + ', '.join(f'{k}=${v["price"]}' for k, v in current.items() if v["price"] > 0))
+    except Exception as e:
+        log(f'  ⚠️  讀取備用資料失敗: {e}')
+
+    return current
+
+
 # ── 資料抓取 ─────────────────────────────────────────────────
 
 def fetch_yahoo_prices(etf_ids):
-    """從 Yahoo Finance 抓取最新股價"""
+    """
+    從 Yahoo Finance 抓取最新股價。
+    依序嘗試多個端點，任一成功即回傳。
+    只記錄 price > 0 的有效結果。
+    """
     symbols = ','.join(f'{i}.TW' for i in etf_ids)
-    url = f'https://query1.finance.yahoo.com/v8/finance/quote?symbols={symbols}'
     prices = {}
-    try:
-        resp = requests.get(url, headers=HEADERS, timeout=12)
-        resp.raise_for_status()
-        results = resp.json().get('quoteResponse', {}).get('result', [])
-        for q in results:
-            etf_id = q['symbol'].replace('.TW', '')
-            prices[etf_id] = {
-                'price': round(q.get('regularMarketPrice', 0), 2),
-                'change_pct': round(q.get('regularMarketChangePercent', 0), 2),
-            }
-        log(f'  ✅ Yahoo Finance: 抓到 {len(prices)} 支 ETF 股價')
-    except Exception as e:
-        log(f'  ⚠️  Yahoo Finance 失敗: {e}')
+
+    endpoints = [
+        f'https://query1.finance.yahoo.com/v8/finance/quote?symbols={symbols}&region=TW&lang=zh-TW',
+        f'https://query2.finance.yahoo.com/v8/finance/quote?symbols={symbols}&region=TW&lang=zh-TW',
+        f'https://query1.finance.yahoo.com/v7/finance/quote?symbols={symbols}',
+        f'https://query2.finance.yahoo.com/v7/finance/quote?symbols={symbols}',
+    ]
+
+    for url in endpoints:
+        try:
+            resp = requests.get(url, headers=HEADERS, timeout=15)
+            if resp.status_code != 200:
+                log(f'  ↳ HTTP {resp.status_code}，嘗試下一端點...')
+                continue
+
+            results = resp.json().get('quoteResponse', {}).get('result', [])
+            for q in results:
+                raw_price = q.get('regularMarketPrice')
+                if raw_price and float(raw_price) > 0:
+                    etf_id = q['symbol'].replace('.TW', '')
+                    prices[etf_id] = {
+                        'price': round(float(raw_price), 2),
+                        'change_pct': round(q.get('regularMarketChangePercent', 0), 2),
+                    }
+
+            if prices:
+                log(f'  ✅ Yahoo Finance 成功（{url.split("?")[0].split("/")[-2]}）: 取得 {len(prices)} 支')
+                return prices
+            else:
+                log(f'  ↳ 回應為空，嘗試下一端點...')
+
+        except Exception as e:
+            log(f'  ↳ 失敗: {e}')
+        time.sleep(0.8)
+
+    # ── 備用：yfinance 套件 ──────────────────────────────────
+    if not prices:
+        log('  🔄 嘗試 yfinance 備用方案...')
+        try:
+            import yfinance as yf
+            symbols_str = ' '.join(f'{i}.TW' for i in etf_ids)
+            tickers = yf.Tickers(symbols_str)
+            for etf_id in etf_ids:
+                try:
+                    info = tickers.tickers[f'{etf_id}.TW'].fast_info
+                    price = getattr(info, 'last_price', None)
+                    if price and float(price) > 0:
+                        prices[etf_id] = {'price': round(float(price), 2), 'change_pct': 0}
+                except Exception:
+                    pass
+            if prices:
+                log(f'  ✅ yfinance 備用成功：取得 {len(prices)} 支')
+        except ImportError:
+            log('  ⚠️  yfinance 未安裝，跳過備用方案')
+        except Exception as e:
+            log(f'  ⚠️  yfinance 備用失敗: {e}')
+
+    if not prices:
+        log('  ❌ 所有股價端點均失敗，將保留 HTML 中原有股價')
+
     return prices
 
 
@@ -91,7 +188,6 @@ def fetch_moneydj_dividends(etf_id, max_records=8):
         resp.raise_for_status()
         soup = BeautifulSoup(resp.text, 'lxml')
 
-        # 找配息記錄表格（嘗試多種選擇器）
         table = (
             soup.find('table', id='RptControl') or
             soup.find('table', class_='datalist') or
@@ -99,24 +195,23 @@ def fetch_moneydj_dividends(etf_id, max_records=8):
             soup.find('table')
         )
         if not table:
-            log(f'    找不到表格')
+            log(f'    找不到配息表格')
             return None
 
         rows = []
         trs = table.find_all('tr')
-        for tr in trs[1:]:  # 跳過標題列
+        for tr in trs[1:]:
             tds = tr.find_all('td')
             if len(tds) < 4:
                 continue
             try:
-                base_date = tds[0].text.strip()   # 配息基準日
-                pay_date  = tds[2].text.strip()    # 發放日
-                amount_raw = tds[3].text.strip()   # 配息金額
+                base_date  = tds[0].text.strip()
+                pay_date   = tds[2].text.strip()
+                amount_raw = tds[3].text.strip()
                 amount = safe_float(amount_raw)
                 if amount is None or amount <= 0:
                     continue
 
-                # 建立標籤：優先使用發放日 YYYY/MM
                 raw = pay_date if '/' in pay_date else base_date
                 label = raw[:7] if len(raw) >= 7 else raw
 
@@ -158,12 +253,11 @@ def build_etf_db_js(all_data, today):
 
     for etf_id, meta in ETF_META.items():
         data = all_data.get(etf_id, {})
-        divs = data.get('dividends') or []
+        divs  = data.get('dividends') or []
         price = data.get('price', 0)
-        y = data.get('yield', 0)
+        y     = data.get('yield', 0)
 
-        # JSON 序列化配息資料
-        divs_json = json.dumps(divs, ensure_ascii=False, separators=(',', ':'))
+        divs_json  = json.dumps(divs, ensure_ascii=False, separators=(',', ':'))
         pay_months = json.dumps(meta['payMonths'])
 
         lines.append(
@@ -185,7 +279,6 @@ def update_html(html_path, all_data, today):
 
     new_block = build_etf_db_js(all_data, today)
 
-    # 替換 <<AUTO_UPDATE_START>> ... <<AUTO_UPDATE_END>> 區段
     pattern = r'// <<AUTO_UPDATE_START>>.*?// <<AUTO_UPDATE_END>>'
     new_html, count = re.subn(pattern, new_block, html, flags=re.DOTALL)
 
@@ -210,8 +303,12 @@ def main():
 
     etf_ids = list(ETF_META.keys())
 
+    # 0. 先讀取 HTML 中的現有資料作為最終備用
+    log('📂 Step 0: 讀取現有 HTML 備用資料...')
+    fallback = get_current_data_from_html(HTML_PATH)
+
     # 1. 抓取股價
-    log('📈 Step 1: 抓取 Yahoo Finance 股價...')
+    log('\n📈 Step 1: 抓取 Yahoo Finance 股價...')
     prices = fetch_yahoo_prices(etf_ids)
 
     # 2. 抓取配息
@@ -221,20 +318,33 @@ def main():
         log(f'  [{etf_id}] {meta["name"]}...')
         divs = fetch_moneydj_dividends(etf_id)
 
+        # ── 股價：新抓 → HTML 備用，絕不寫 0 ──────────────────
         price = prices.get(etf_id, {}).get('price', 0)
-        y = calc_yield(divs, price, meta['frequency']) if divs and price else 0
+        if not price or price <= 0:
+            price = fallback[etf_id]['price']
+            if price > 0:
+                log(f'    ℹ️  股價使用 HTML 備用值 ${price}')
+            else:
+                log(f'    ⚠️  股價完全無法取得（寫入 0，請手動修正）')
 
+        # ── 配息：新抓 → HTML 備用，不清空歷史 ────────────────
         if divs:
-            log(f'    ✅ 取得 {len(divs)} 筆，最新: ${divs[0]["amount"]} ({divs[0]["label"]})')
+            log(f'    ✅ 取得 {len(divs)} 筆配息，最新: ${divs[0]["amount"]} ({divs[0]["label"]})')
         else:
-            log(f'    ⚠️  配息抓取失敗，保留舊資料（需手動更新）')
+            divs = fallback[etf_id]['dividends']
+            if divs:
+                log(f'    ℹ️  配息使用 HTML 備用值（{len(divs)} 筆）')
+            else:
+                log(f'    ⚠️  配息完全無法取得')
+
+        y = calc_yield(divs, price, meta['frequency']) if divs and price else 0
 
         all_data[etf_id] = {
             'dividends': divs,
             'price': price,
             'yield': y,
         }
-        time.sleep(1.2)  # 避免請求過於頻繁
+        time.sleep(1.2)
 
     # 3. 更新 HTML
     log(f'\n📝 Step 3: 更新 {HTML_PATH}...')
@@ -245,10 +355,11 @@ def main():
     log('📊 更新摘要:')
     for etf_id, data in all_data.items():
         meta = ETF_META[etf_id]
-        p = data['price']
-        y = data['yield']
+        p    = data['price']
+        y    = data['yield']
         d_ok = '✅' if data['dividends'] else '⚠️ '
-        log(f'  {d_ok} {etf_id} {meta["name"][:8]}: 股價=${p}, 殖利率={y}%')
+        p_ok = '✅' if p > 0 else '❌'
+        log(f'  {d_ok}{p_ok} {etf_id} {meta["name"][:8]}: 股價=${p}, 殖利率={y}%')
 
     if success:
         log(f'\n✅ 完成！index.html 已更新至 {today}')
