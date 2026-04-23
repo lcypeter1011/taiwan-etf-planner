@@ -179,8 +179,30 @@ def fetch_yahoo_prices(etf_ids):
     return prices
 
 
+def find_dividend_amount(tds):
+    """
+    從表格行的所有欄位中，智慧尋找「每單位配息金額」。
+    台灣 ETF 每單位配息通常介於 0.01 ~ 10 TWD 之間。
+    回傳 (amount, col_index) 或 (None, None)。
+    """
+    # 先嘗試 tds[3]（原始設定）
+    for try_cols in ([3], [2], [4], [1]):
+        for idx in try_cols:
+            if idx >= len(tds):
+                continue
+            text = tds[idx].text.strip()
+            # 排除含斜線的日期欄位
+            if '/' in text or '-' in text:
+                continue
+            val = safe_float(text)
+            # 每單位配息合理範圍：0.01 ~ 10 TWD
+            if val is not None and 0.01 <= val <= 10:
+                return val, idx
+    return None, None
+
+
 def fetch_moneydj_dividends(etf_id, max_records=8):
-    """從 MoneyDJ 抓取 ETF 配息歷史"""
+    """從 MoneyDJ 抓取 ETF 配息歷史（含欄位驗證防呆）"""
     url = f'https://www.moneydj.com/ETF/X/Basic/Basic0005.xdjhtm?etfid={etf_id}.TW'
     try:
         session = requests.Session()
@@ -188,38 +210,65 @@ def fetch_moneydj_dividends(etf_id, max_records=8):
         resp.raise_for_status()
         soup = BeautifulSoup(resp.text, 'lxml')
 
+        # 優先找有 id 的配息表格，再依序 fallback
         table = (
             soup.find('table', id='RptControl') or
             soup.find('table', class_='datalist') or
-            soup.find('table', {'border': '1'}) or
-            soup.find('table')
+            soup.find('table', {'border': '1'})
         )
+        # 若找不到特定表格，從全部 table 中挑「包含小數配息數值」的
         if not table:
-            log(f'    找不到配息表格')
+            for t in soup.find_all('table'):
+                trs = t.find_all('tr')
+                if len(trs) >= 3:
+                    # 確認至少 2 行有合理配息金額
+                    hits = 0
+                    for tr in trs[1:4]:
+                        tds = tr.find_all('td')
+                        amt, _ = find_dividend_amount(tds)
+                        if amt:
+                            hits += 1
+                    if hits >= 2:
+                        table = t
+                        break
+
+        if not table:
+            log(f'    找不到含有效配息數值的表格')
             return None
 
         rows = []
         trs = table.find_all('tr')
         for tr in trs[1:]:
             tds = tr.find_all('td')
-            if len(tds) < 4:
+            if len(tds) < 2:
                 continue
             try:
-                base_date  = tds[0].text.strip()
-                pay_date   = tds[2].text.strip()
-                amount_raw = tds[3].text.strip()
-                amount = safe_float(amount_raw)
-                if amount is None or amount <= 0:
+                amount, amt_col = find_dividend_amount(tds)
+                if amount is None:
                     continue
 
-                raw = pay_date if '/' in pay_date else base_date
-                label = raw[:7] if len(raw) >= 7 else raw
+                # 取日期：優先找含 '/' 的欄位
+                date_text = ''
+                for td in tds:
+                    txt = td.text.strip()
+                    if '/' in txt and len(txt) >= 7:
+                        date_text = txt
+                        break
+                if not date_text:
+                    date_text = tds[0].text.strip()
+
+                label = date_text[:7] if len(date_text) >= 7 else date_text
 
                 rows.append({'label': label, 'amount': amount})
                 if len(rows) >= max_records:
                     break
             except Exception:
                 continue
+
+        if rows:
+            log(f'    ✅ 取得 {len(rows)} 筆，範圍 ${rows[-1]["amount"]}~${rows[0]["amount"]}')
+        else:
+            log(f'    ⚠️  解析結果為空')
 
         return rows if rows else None
 
@@ -256,6 +305,18 @@ def build_etf_db_js(all_data, today):
         divs  = data.get('dividends') or []
         price = data.get('price', 0)
         y     = data.get('yield', 0)
+
+        # ── 最終防呆：確保寫入的數值合理 ─────────────────────
+        # 每單位配息必須在合理範圍（0.01~10 TWD），否則視為爬蟲錯誤，清空
+        valid_divs = [d for d in divs if isinstance(d.get('amount'), (int, float))
+                      and 0.01 <= d['amount'] <= 10]
+        if len(valid_divs) < len(divs):
+            log(f'  ⚠️  [{etf_id}] 過濾掉 {len(divs)-len(valid_divs)} 筆異常配息記錄')
+            divs = valid_divs
+        # 殖利率必須在 0.1%~50% 之間
+        if not (0.1 <= y <= 50):
+            log(f'  ⚠️  [{etf_id}] 殖利率 {y}% 異常，重新計算')
+            y = calc_yield(divs, price, meta['frequency']) if divs and price else 0
 
         divs_json  = json.dumps(divs, ensure_ascii=False, separators=(',', ':'))
         pay_months = json.dumps(meta['payMonths'])
