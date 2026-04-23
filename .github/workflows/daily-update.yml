@@ -5,7 +5,7 @@ on:
   schedule:
     - cron: '0 0 * * *'
 
-  # 允許手動在 GitHub 網頁點擊執行
+  # 允許手動在 GitHub 網頁點擊執行（可立即觸發更新）
   workflow_dispatch:
 
 jobs:
@@ -24,7 +24,9 @@ jobs:
           python-version: '3.11'
 
       - name: 安裝依賴套件
-        run: pip install requests beautifulsoup4 lxml
+        run: |
+          pip install --upgrade pip
+          pip install requests beautifulsoup4 lxml yfinance
 
       - name: 執行 ETF 資料更新腳本
         run: python update_etf_data.py
