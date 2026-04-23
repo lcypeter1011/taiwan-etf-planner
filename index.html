@@ -333,11 +333,16 @@ footer{text-align:center;font-size:.7rem;color:var(--muted);padding:16px;border-
 // <<AUTO_UPDATE_START>>
 const LAST_UPDATED = "2026-04-23";
 const ETF_DB = [
-  {id:'00919',name:'群益台灣精選高息',price:23.61,yield:10.9,fundSize:4200,frequency:'quarterly',payMonths:[1, 4, 7, 10],color:'#22c55e',enabled:true,dividendHistory:[{"label":"2026Q1","amount":0.78},{"label":"2025Q4","amount":0.54},{"label":"2025Q3","amount":0.54},{"label":"2025Q2","amount":0.72},{"label":"2025Q1","amount":0.72},{"label":"2024Q4","amount":0.72},{"label":"2024Q3","amount":0.72},{"label":"2024Q2","amount":0.7}]},
-  {id:'0056',name:'元大高股息',price:40.94,yield:8.8,fundSize:4600,frequency:'quarterly',payMonths:[2, 5, 8, 11],color:'#3b82f6',enabled:true,dividendHistory:[{"label":"2026Q2","amount":1.0},{"label":"2025Q4+","amount":0.866},{"label":"2025Q3","amount":0.866},{"label":"2025Q2","amount":0.866},{"label":"2025Q1","amount":1.07},{"label":"2024Q4","amount":1.07},{"label":"2024Q3","amount":1.07},{"label":"2024Q2","amount":1.07}]},
-  {id:'00878',name:'國泰永續高股息',price:24.81,yield:6.8,fundSize:5800,frequency:'quarterly',payMonths:[3, 6, 9, 12],color:'#f97316',enabled:true,dividendHistory:[{"label":"2026Q1","amount":0.42},{"label":"2025Q4","amount":0.4},{"label":"2025Q3","amount":0.4},{"label":"2025Q2","amount":0.47},{"label":"2025Q1","amount":0.5},{"label":"2024Q4","amount":0.55},{"label":"2024Q3","amount":0.55},{"label":"2024Q2","amount":0.51}]},
-  {id:'00929',name:'復華台灣科技優息',price:22.1,yield:6.2,fundSize:4000,frequency:'monthly',payMonths:[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],color:'#a855f7',enabled:false,dividendHistory:[{"label":"2026/04","amount":0.13},{"label":"2026/03","amount":0.11},{"label":"2026/02","amount":0.1},{"label":"2026/01","amount":0.09},{"label":"2025/12","amount":0.09},{"label":"2025/11","amount":0.07},{"label":"2025/10","amount":0.07},{"label":"2025/09","amount":0.06}]},
-  {id:'00713',name:'元大台灣高息低波',price:53.6,yield:6.4,fundSize:2400,frequency:'quarterly',payMonths:[1, 4, 7, 10],color:'#ef4444',enabled:false,dividendHistory:[{"label":"2026Q1","amount":0.78},{"label":"2025Q4","amount":0.78},{"label":"2025Q3","amount":0.78},{"label":"2025Q2","amount":1.1},{"label":"2025Q1","amount":1.4},{"label":"2024Q4","amount":1.4},{"label":"2024Q3","amount":1.5},{"label":"2024Q2","amount":1.5}]},
+  {id:'00919',name:'群益台灣精選高息',price:23.87,yield:10.8,fundSize:4200,frequency:'quarterly',payMonths:[1,4,7,10],color:'#22c55e',enabled:true,
+   dividendHistory:[{label:'2026Q1',amount:0.78},{label:'2025Q4',amount:0.54},{label:'2025Q3',amount:0.54},{label:'2025Q2',amount:0.72},{label:'2025Q1',amount:0.72},{label:'2024Q4',amount:0.72},{label:'2024Q3',amount:0.72},{label:'2024Q2',amount:0.70}]},
+  {id:'0056',name:'元大高股息',price:41.56,yield:8.9,fundSize:4600,frequency:'quarterly',payMonths:[2,5,8,11],color:'#3b82f6',enabled:true,
+   dividendHistory:[{label:'2026Q2',amount:1.00},{label:'2025Q4+',amount:0.866},{label:'2025Q3',amount:0.866},{label:'2025Q2',amount:0.866},{label:'2025Q1',amount:1.07},{label:'2024Q4',amount:1.07},{label:'2024Q3',amount:1.07},{label:'2024Q2',amount:1.07}]},
+  {id:'00878',name:'國泰永續高股息',price:25.16,yield:6.7,fundSize:5800,frequency:'quarterly',payMonths:[3,6,9,12],color:'#f97316',enabled:true,
+   dividendHistory:[{label:'2026Q1',amount:0.42},{label:'2025Q4',amount:0.40},{label:'2025Q3',amount:0.40},{label:'2025Q2',amount:0.47},{label:'2025Q1',amount:0.50},{label:'2024Q4',amount:0.55},{label:'2024Q3',amount:0.55},{label:'2024Q2',amount:0.51}]},
+  {id:'00929',name:'復華台灣科技優息',price:22.67,yield:6.0,fundSize:4000,frequency:'monthly',payMonths:[1,2,3,4,5,6,7,8,9,10,11,12],color:'#a855f7',enabled:false,
+   dividendHistory:[{label:'2026/04',amount:0.13},{label:'2026/03',amount:0.11},{label:'2026/02',amount:0.10},{label:'2026/01',amount:0.09},{label:'2025/12',amount:0.09},{label:'2025/11',amount:0.07},{label:'2025/10',amount:0.07},{label:'2025/09',amount:0.06}]},
+  {id:'00713',name:'元大台灣高息低波',price:53.95,yield:6.4,fundSize:2400,frequency:'quarterly',payMonths:[1,4,7,10],color:'#ef4444',enabled:false,
+   dividendHistory:[{label:'2026Q1',amount:0.78},{label:'2025Q4',amount:0.78},{label:'2025Q3',amount:0.78},{label:'2025Q2',amount:1.10},{label:'2025Q1',amount:1.40},{label:'2024Q4',amount:1.40},{label:'2024Q3',amount:1.50},{label:'2024Q2',amount:1.50}]}
 ];
 // <<AUTO_UPDATE_END>>
 
@@ -642,27 +647,52 @@ function updateTicker(res,mode){
 }
 
 /* ─── HEALTH SCORE ─── */
+/*
+ * 評分架構 (總分 100)：
+ *   殖利率  30分  — 10% 為滿分門檻
+ *   穩定性  30分  — 配息變異係數 (CV)
+ *   趨勢    30分  — 最新一期 ÷ 歷史均值（反映當前配息動能）
+ *   規模    10分  — 基金規模（清算風險代理指標）
+ */
 function healthScore(etf){
-  const h=[...etf.dividendHistory].reverse().map(d=>d.amount);
-  const n=h.length,mean=h.reduce((a,b)=>a+b,0)/n;
+  // 配息陣列：newest-first → reverse → oldest-first
+  const valid=etf.dividendHistory.filter(d=>d.amount>0&&d.amount<50);
+  if(!valid.length) return{tot:0,grade:'C',gc:'#ef4444',stab:0,trend:0,ys:0,ss:0,tdir:'stable',tpct:0,flags:[{t:'warn',s:t('allGood')}]};
+  const h=[...valid].reverse().map(d=>d.amount);
+  const n=h.length;
+
+  // ── 穩定性（30分）：配息一致性，CV 越小越穩 ──────────────
+  const mean=h.reduce((a,b)=>a+b,0)/n;
   const std=Math.sqrt(h.reduce((s,v)=>s+Math.pow(v-mean,2),0)/n);
   const cv=mean>0?std/mean:1;
-  const stab=cv<0.05?35:cv<0.10?28:cv<0.15?21:cv<0.25?14:7;
-  const r4=h.slice(-4).reduce((a,b)=>a+b,0)/4,p4=h.slice(0,4).reduce((a,b)=>a+b,0)/4;
-  const tpct=p4>0?(r4-p4)/p4*100:0;
-  const trend=tpct>5?30:tpct>0?24:tpct>-5?16:8;
-  const tdir=tpct>1?'up':tpct<-1?'down':'stable';
-  const ys=etf.yield>=10?20:etf.yield>=8?16:etf.yield>=6?12:etf.yield>=4?8:4;
-  const ss=etf.fundSize>=5000?15:etf.fundSize>=4000?12:etf.fundSize>=2000?9:6;
+  const stab=cv<0.08?30:cv<0.13?24:cv<0.20?17:cv<0.30?10:4;
+
+  // ── 趨勢（30分）：最新一期配息 vs. 全期歷史均值 ──────────
+  // 用「最新 ÷ 均值」取代舊的「近4期 vs 舊4期」，
+  // 能即時反映最新配息動能，不受中途短暫低點誤導。
+  const latest=h[n-1];           // 最新一期（newest end after reverse）
+  const ratio=mean>0?latest/mean:0;
+  const tpct=Math.round((ratio-1)*1000)/10;  // 偏離均值百分比
+  const trend=ratio>=1.10?30:ratio>=1.00?25:ratio>=0.90?18:ratio>=0.80?10:3;
+  const tdir=ratio>=1.05?'up':ratio<0.90?'down':'stable';
+
+  // ── 殖利率（30分）：10% 為滿分門檻 ─────────────────────
+  const ys=etf.yield>=10?30:etf.yield>=8?24:etf.yield>=6?18:etf.yield>=4?10:4;
+
+  // ── 規模（10分）：基本安全門檻 ──────────────────────────
+  const ss=etf.fundSize>=5000?10:etf.fundSize>=4000?8:etf.fundSize>=2000?6:4;
+
   const tot=stab+trend+ys+ss;
-  const grade=tot>=85?'AAA':tot>=70?'AA':tot>=55?'A':tot>=40?'B':'C';
-  const gc=tot>=85?'#22c55e':tot>=70?'#3b82f6':tot>=55?'#f59e0b':tot>=40?'#f97316':'#ef4444';
+  const grade=tot>=88?'AAA':tot>=75?'AA':tot>=60?'A':tot>=45?'B':'C';
+  const gc=tot>=88?'#22c55e':tot>=75?'#3b82f6':tot>=60?'#f59e0b':tot>=45?'#f97316':'#ef4444';
+
+  // ── 旗標 ─────────────────────────────────────────────
   const flags=[];
-  if(cv>0.2)flags.push({t:'warn',s:t('highVol')});
-  if(tpct<-10)flags.push({t:'danger',s:t('bigDrop')});
-  else if(tpct<-3)flags.push({t:'warn',s:t('smallDrop')});
-  if(tpct>5)flags.push({t:'ok',s:t('growing')});
-  if(etf.yield>11)flags.push({t:'ok',s:t('highYield')});
+  if(cv>0.20)flags.push({t:'warn',s:t('highVol')});
+  if(ratio<0.75)flags.push({t:'danger',s:t('bigDrop')});
+  else if(ratio<0.85)flags.push({t:'warn',s:t('smallDrop')});
+  if(ratio>=1.05)flags.push({t:'ok',s:t('growing')});
+  if(etf.yield>=10)flags.push({t:'ok',s:t('highYield')});
   if(etf.fundSize<3000)flags.push({t:'warn',s:t('smallScale')});
   if(!flags.length)flags.push({t:'ok',s:t('allGood')});
   return{tot,grade,gc,stab,trend,ys,ss,tdir,tpct,flags};
@@ -685,10 +715,10 @@ function renderHealthGrid(){
       </div>
       <h4><span style="background:${etf.color};color:#fff;border-radius:4px;padding:1px 6px;font-size:.7rem">${etf.id}</span> ${etfName(etf)}</h4>
       <div class="sub-scores">
-        <div class="sub-row"><span>${t('stability')}</span><div class="sub-bar"><div class="sub-fill" style="width:${h.stab/35*100}%;background:${etf.color}"></div></div><span>${h.stab}/35</span></div>
+        <div class="sub-row"><span>${t('stability')}</span><div class="sub-bar"><div class="sub-fill" style="width:${h.stab/30*100}%;background:${etf.color}"></div></div><span>${h.stab}/30</span></div>
         <div class="sub-row"><span>${t('trend')}</span><div class="sub-bar"><div class="sub-fill" style="width:${h.trend/30*100}%;background:${etf.color}"></div></div><span>${h.trend}/30</span></div>
-        <div class="sub-row"><span>${t('dividYield')}</span><div class="sub-bar"><div class="sub-fill" style="width:${h.ys/20*100}%;background:${etf.color}"></div></div><span>${h.ys}/20</span></div>
-        <div class="sub-row"><span>${t('scale')}</span><div class="sub-bar"><div class="sub-fill" style="width:${h.ss/15*100}%;background:${etf.color}"></div></div><span>${h.ss}/15</span></div>
+        <div class="sub-row"><span>${t('dividYield')}</span><div class="sub-bar"><div class="sub-fill" style="width:${h.ys/30*100}%;background:${etf.color}"></div></div><span>${h.ys}/30</span></div>
+        <div class="sub-row"><span>${t('scale')}</span><div class="sub-bar"><div class="sub-fill" style="width:${h.ss/10*100}%;background:${etf.color}"></div></div><span>${h.ss}/10</span></div>
       </div>
       <div style="margin-bottom:6px"><span class="tbadge ${tc}">${tl}</span></div>
       <div class="flag-list">${h.flags.map(f=>`<div class="flag f-${f.t}">${f.s}</div>`).join('')}</div>
