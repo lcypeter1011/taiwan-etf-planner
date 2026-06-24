@@ -224,7 +224,7 @@ footer{text-align:center;font-size:.7rem;color:var(--muted);padding:16px;border-
   <div class="card goal-bar">
     <div>
       <label id="labelTarget">每月目標領息（元）</label>
-      <input type="number" id="targetIncome" value="50000" min="1000" step="1000" oninput="clearManualLock();recalcAll()">
+      <input type="number" id="targetIncome" value="50000" min="1000" step="1000" oninput="recalcAll()">
     </div>
     <button class="btn btn-gold" id="btnBalance" onclick="autoBalance()">✨ 智慧均衡配置</button>
     <button class="btn btn-outline" id="btnReset" onclick="resetToDefault()">↺ 重置</button>
@@ -390,7 +390,7 @@ const I18N = {
     /* month table cell */
     noETF:'無',
     /* mode hints */
-    manualHint:'<strong>✏️ 全手動模式：</strong>自由調整每支ETF比例，需自行確保合計達100%。',
+    manualHint:'<strong>✏️ 全手動模式：</strong>直接輸入每檔 ETF 的投入金額，配置比例與持股張數自動計算。',
     autoHint:'<strong>🔄 100% 自動模式：</strong>調整任一ETF比例時，其餘ETF將自動按比例補齊，總計永遠維持100%。',
     /* ticker */
     livePrice:'即時股價',cachedPrice:'快取股價',fetchFailed:'即時抓取失敗',cachedTag:'快取',
@@ -413,6 +413,7 @@ const I18N = {
     secAlloc:'⚖️ 持股比例配置',secAllocHint:'合計需等於 100%',
     btnManualLbl:'✏️ 全手動',btn100pctLbl:'🔄 100% 自動',
     thETF:'ETF',thAlloc:'配置比例',thInv:'建議投入（元）',thShares:'持股（張）',thAnn:'年化收益（估）',
+    thAllocManual:'投入金額（元）',thInvAutoPct:'配置比例（自動）',
     tdTotal:'合計',
     secResults:'💰 每月預估領息試算',
     thMonth:'月份',thPayETF:'配息ETF',thIncome:'預估領息',thStatus:'達標狀況',
@@ -464,7 +465,7 @@ const I18N = {
     /* month table cell */
     noETF:'None',
     /* mode hints */
-    manualHint:"<strong>✏️ Manual Mode:</strong> Freely adjust each ETF's allocation. Ensure total equals 100% yourself.",
+    manualHint:"<strong>✏️ Manual Mode:</strong> Enter the investment amount for each ETF directly. Allocation % and shares are calculated automatically.",
     autoHint:'<strong>🔄 Auto-100% Mode:</strong> Adjusting one ETF automatically redistributes others proportionally to keep total at 100%.',
     /* ticker */
     livePrice:'Live Price',cachedPrice:'Cached Price',fetchFailed:'Live fetch failed',cachedTag:'cached',
@@ -487,6 +488,7 @@ const I18N = {
     secAlloc:'⚖️ Allocation Settings',secAllocHint:'Total must equal 100%',
     btnManualLbl:'✏️ Manual',btn100pctLbl:'🔄 Auto-100%',
     thETF:'ETF',thAlloc:'Allocation',thInv:'Suggested Amount (TWD)',thShares:'Shares (lots)',thAnn:'Est. Annual Return',
+    thAllocManual:'Investment (TWD)',thInvAutoPct:'Allocation (auto)',
     tdTotal:'Total',
     secResults:'💰 Monthly Income Estimate',
     thMonth:'Month',thPayETF:'Paying ETF',thIncome:'Est. Income',thStatus:'Goal Status',
@@ -855,44 +857,110 @@ function renderETFCards(){
 
 /* ─── ALLOC & INCOME ─── */
 function calcMI(){
-  const tot=getTotInv(),mi=Array(12).fill(0);
+  const mi=Array(12).fill(0);
   ETF_DB.filter(e=>e.enabled).forEach(etf=>{
-    const inv=tot*(etf.allocation||0)/100,ann=inv*etf.yield/100;
+    // 全手動：以使用者輸入的投入金額直接計算；自動模式：按比例推算
+    const inv=allocMode==='manual'?(etf.manualAmount||0):getTotInv()*(etf.allocation||0)/100;
+    const ann=inv*etf.yield/100;
     if(etf.frequency==='monthly')for(let i=0;i<12;i++)mi[i]+=ann/12;
     else etf.payMonths.forEach(m=>mi[m-1]+=ann/4);
   });
   return mi;
 }
 function getTotInv(){
-  // 全手動模式：使用鎖定的總投入金額，避免調整單一ETF比例時其他ETF金額跟著變動
-  if(allocMode==='manual'&&_manualLockedTotInv!==null) return _manualLockedTotInv;
   const wy=getWY();return wy>0?(parseFloat(document.getElementById('targetIncome')?.value)||50000)*12/wy:0;
+}
+// 全手動模式下的「有效總投入」= 各ETF投入金額加總；自動模式 = getTotInv()
+function getEffectiveTot(){
+  if(allocMode==='manual') return ETF_DB.filter(e=>e.enabled).reduce((s,e)=>s+(e.manualAmount||0),0);
+  return getTotInv();
 }
 function getWY(){return ETF_DB.filter(e=>e.enabled).reduce((s,e)=>s+(e.allocation||0)/100*e.yield/100,0)||0.01}
 
+// 切換到全手動模式時，將目前的%配置換算為投入金額（若尚未設定）
+function initManualAmounts(){
+  const totInv=getTotInv();
+  ETF_DB.forEach(e=>{
+    if(e.enabled){
+      if(!e.manualAmount) e.manualAmount=Math.round(totInv*(e.allocation||0)/100);
+    } else {
+      // 停用的ETF保留金額供重新啟用時參考，不清零
+    }
+  });
+}
+
+function setManualAmount(id,value){
+  const e=ETF_DB.find(x=>x.id===id);
+  if(!e) return;
+  e.manualAmount=Math.max(0,parseFloat(value)||0);
+  recalcAll();
+}
+
 function renderAlloc(){
-  const act=ETF_DB.filter(e=>e.enabled),tot=getTotInv();
-  if(!act.length){document.getElementById('allocBody').innerHTML=`<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:14px">${t('noETFEnabled')}</td></tr>`;return}
-  document.getElementById('allocBody').innerHTML=act.map(etf=>{
-    const inv=tot*(etf.allocation||0)/100,shr=inv>0?Math.floor(inv/etf.price/1000):0,ann=inv*etf.yield/100;
-    return `<tr>
-      <td><span style="display:inline-block;width:9px;height:9px;background:${etf.color};border-radius:2px;margin-right:5px"></span><strong>${etf.id}</strong> ${etfName(etf)}</td>
-      <td><div class="abar"><input type="range" min="0" max="100" step="1" value="${etf.allocation||0}" style="accent-color:${etf.color}" oninput="setAlloc('${etf.id}',+this.value);document.getElementById('pct${etf.id}').value=this.value" id="rng${etf.id}"><input type="number" class="apct" min="0" max="100" step="1" value="${etf.allocation||0}" oninput="setAlloc('${etf.id}',+this.value);document.getElementById('rng${etf.id}').value=this.value" id="pct${etf.id}">%</div></td>
-      <td>${inv>0?fmt(Math.round(inv)):'—'}</td>
-      <td>${shr>0?shr+' '+t('sharesUnit'):'—'}</td>
-      <td>${ann>0?fmt(Math.round(ann)):'—'}</td>
-    </tr>`;
-  }).join('');
-  const tp=act.reduce((s,e)=>s+(e.allocation||0),0);
-  const pc=document.getElementById('totPct');
-  pc.textContent=tp.toFixed(1)+'%';pc.className=Math.abs(tp-100)<0.5?'pok':'pwarn';
-  document.getElementById('totInv').textContent=fmt(Math.round(act.reduce((s,e)=>s+tot*(e.allocation||0)/100,0)));
-  document.getElementById('totAnn').textContent=fmt(Math.round(act.reduce((s,e)=>s+tot*(e.allocation||0)/100*e.yield/100,0)));
+  const act=ETF_DB.filter(e=>e.enabled);
+
+  // 根據模式切換欄位標題
+  const h2=document.getElementById('thAlloc');
+  const h3=document.getElementById('thInv');
+  if(h2) h2.innerHTML=allocMode==='manual'?t('thAllocManual'):t('thAlloc');
+  if(h3) h3.innerHTML=allocMode==='manual'?t('thInvAutoPct'):t('thInv');
+
+  if(!act.length){
+    document.getElementById('allocBody').innerHTML=`<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:14px">${t('noETFEnabled')}</td></tr>`;
+    return;
+  }
+
+  if(allocMode==='manual'){
+    /* ── 全手動模式：直接輸入投入金額 ── */
+    const totManual=act.reduce((s,e)=>s+(e.manualAmount||0),0);
+    document.getElementById('allocBody').innerHTML=act.map(etf=>{
+      const inv=etf.manualAmount||0;
+      const pct=totManual>0?Math.round(inv/totManual*1000)/10:0;
+      const shr=inv>0&&etf.price>0?Math.floor(inv/etf.price/1000):0;
+      const ann=inv*etf.yield/100;
+      return `<tr>
+        <td><span style="display:inline-block;width:9px;height:9px;background:${etf.color};border-radius:2px;margin-right:5px"></span><strong>${etf.id}</strong> ${etfName(etf)}</td>
+        <td><input type="number" min="0" step="10000" value="${Math.round(inv)}"
+             style="width:138px;border:1.5px solid var(--border);border-radius:10px;padding:6px 10px;font-size:.88rem;background:#f8fafc;color:var(--text);text-align:right;outline:none"
+             onfocus="this.select()"
+             oninput="setManualAmount('${etf.id}',+this.value)"
+             onblur="if(!this.value||+this.value<0)this.value=0"></td>
+        <td style="color:var(--muted);font-size:.82rem">${pct>0?pct.toFixed(1)+'%':'—'}</td>
+        <td>${shr>0?shr+' '+t('sharesUnit'):'—'}</td>
+        <td>${ann>0?fmt(Math.round(ann)):'—'}</td>
+      </tr>`;
+    }).join('');
+    const annTot=act.reduce((s,e)=>s+(e.manualAmount||0)*e.yield/100,0);
+    const pc=document.getElementById('totPct');
+    pc.textContent=totManual>0?'100.0%':'—';
+    pc.className=totManual>0?'pok':'pwarn';
+    document.getElementById('totInv').textContent=totManual>0?fmt(Math.round(totManual)):'—';
+    document.getElementById('totAnn').textContent=annTot>0?fmt(Math.round(annTot)):'—';
+
+  } else {
+    /* ── 100% 自動模式：調整配置比例 ── */
+    const tot=getTotInv();
+    document.getElementById('allocBody').innerHTML=act.map(etf=>{
+      const inv=tot*(etf.allocation||0)/100,shr=inv>0?Math.floor(inv/etf.price/1000):0,ann=inv*etf.yield/100;
+      return `<tr>
+        <td><span style="display:inline-block;width:9px;height:9px;background:${etf.color};border-radius:2px;margin-right:5px"></span><strong>${etf.id}</strong> ${etfName(etf)}</td>
+        <td><div class="abar"><input type="range" min="0" max="100" step="1" value="${etf.allocation||0}" style="accent-color:${etf.color}" oninput="setAlloc('${etf.id}',+this.value);document.getElementById('pct${etf.id}').value=this.value" id="rng${etf.id}"><input type="number" class="apct" min="0" max="100" step="1" value="${etf.allocation||0}" oninput="setAlloc('${etf.id}',+this.value);document.getElementById('rng${etf.id}').value=this.value" id="pct${etf.id}">%</div></td>
+        <td>${inv>0?fmt(Math.round(inv)):'—'}</td>
+        <td>${shr>0?shr+' '+t('sharesUnit'):'—'}</td>
+        <td>${ann>0?fmt(Math.round(ann)):'—'}</td>
+      </tr>`;
+    }).join('');
+    const tp=act.reduce((s,e)=>s+(e.allocation||0),0);
+    const pc=document.getElementById('totPct');
+    pc.textContent=tp.toFixed(1)+'%';pc.className=Math.abs(tp-100)<0.5?'pok':'pwarn';
+    document.getElementById('totInv').textContent=fmt(Math.round(act.reduce((s,e)=>s+tot*(e.allocation||0)/100,0)));
+    document.getElementById('totAnn').textContent=fmt(Math.round(act.reduce((s,e)=>s+tot*(e.allocation||0)/100*e.yield/100,0)));
+  }
 }
 
 function updateStats(){
   const tgt=parseFloat(document.getElementById('targetIncome').value)||50000;
-  const tot=getTotInv(),mi=calcMI(),ann=mi.reduce((a,b)=>a+b,0);
+  const tot=getEffectiveTot(),mi=calcMI(),ann=mi.reduce((a,b)=>a+b,0);
   document.getElementById('totalInvDisp').textContent=tot>0?'$'+fmt(Math.round(tot)):'—';
   document.getElementById('avgMonthDisp').textContent='$'+fmt(Math.round(ann/12));
   const met=mi.filter(v=>v>=tgt*0.9).length;
@@ -909,7 +977,9 @@ function renderMonthChart(){
   const tot=getTotInv();
   const months=t('months');
   const ds=ETF_DB.filter(e=>e.enabled).map(etf=>{
-    const inv=tot*(etf.allocation||0)/100,ann=inv*etf.yield/100,data=Array(12).fill(0);
+    // 全手動：用實際投入金額；自動模式：按比例推算
+    const inv=allocMode==='manual'?(etf.manualAmount||0):tot*(etf.allocation||0)/100;
+    const ann=inv*etf.yield/100,data=Array(12).fill(0);
     if(etf.frequency==='monthly')for(let i=0;i<12;i++)data[i]=Math.round(ann/12);
     else etf.payMonths.forEach(m=>data[m-1]=Math.round(ann/4));
     return{label:etf.id,data,backgroundColor:etf.color+'bb',borderColor:etf.color,borderWidth:1,borderRadius:3};
@@ -944,37 +1014,62 @@ function autoBalance(){
   const act=ETF_DB.filter(e=>e.enabled);
   if(!act.length)return;
   const tgt=parseFloat(document.getElementById('targetIncome').value)||50000;
+  // 計算最佳%配置
   const inv={};
   act.forEach(e=>{inv[e.id]=(tgt*e.payMonths.length)/(e.yield/100)});
   const sum=Object.values(inv).reduce((a,b)=>a+b,0);
   act.forEach(e=>{e.allocation=Math.round(inv[e.id]/sum*1000)/10});
   const diff=100-act.reduce((s,e)=>s+(e.allocation||0),0);
   if(act.length)act[0].allocation=Math.round((act[0].allocation+diff)*10)/10;
-  clearManualLock(); // 重新均衡後清除鎖定，讓後續手動調整以新總額為基準
+  // 全手動模式：同時更新各ETF的投入金額
+  if(allocMode==='manual'){
+    const totInv=getTotInv(); // 以均衡後的%推算總額
+    act.forEach(e=>{e.manualAmount=Math.round(totInv*(e.allocation||0)/100)});
+  }
   recalcAll();
 }
 
 /* ─── ALLOC MODE ─── */
 let allocMode = 'manual';
-// 全手動模式：鎖定總投入金額，調整單一比例時其他ETF金額不受影響
-let _manualLockedTotInv = null;
-
-// 清除鎖定（當目標金額、股價、ETF啟用狀態等改變時呼叫）
-function clearManualLock(){ _manualLockedTotInv=null; }
 
 function setAllocMode(mode) {
+  const prev = allocMode;
   allocMode = mode;
-  _manualLockedTotInv=null; // 切換模式時重置鎖定
+  if(mode==='manual' && prev!=='manual'){
+    // 切換至全手動：把目前%配置換算為投入金額
+    initManualAmounts();
+  } else if(mode==='100pct' && prev==='manual'){
+    // 切換至自動：把手動金額換算回%比例
+    const totManual=ETF_DB.filter(e=>e.enabled).reduce((s,e)=>s+(e.manualAmount||0),0);
+    if(totManual>0){
+      ETF_DB.filter(e=>e.enabled).forEach(e=>{
+        e.allocation=Math.round((e.manualAmount||0)/totManual*1000)/10;
+      });
+      // 補足浮點誤差
+      const act=ETF_DB.filter(e=>e.enabled);
+      const diff=Math.round((100-act.reduce((s,e)=>s+(e.allocation||0),0))*10)/10;
+      if(act.length&&Math.abs(diff)>=0.1) act[0].allocation=Math.round((act[0].allocation+diff)*10)/10;
+    }
+  }
   document.getElementById('btnManual').className = 'mbtn' + (mode==='manual'?' active':'');
   document.getElementById('btn100pct').className = 'mbtn' + (mode==='100pct'?' active':'');
   document.getElementById('modeHint').innerHTML = mode === 'manual' ? t('manualHint') : t('autoHint');
+  recalcAll();
 }
 
 /* ─── HANDLERS ─── */
 function toggleETF(id){
-  const e=ETF_DB.find(x=>x.id===id);e.enabled=!e.enabled;
-  if(!e.enabled)e.allocation=0;
-  clearManualLock(); // ETF啟用狀態改變，重置鎖定
+  const e=ETF_DB.find(x=>x.id===id);
+  e.enabled=!e.enabled;
+  if(!e.enabled){
+    e.allocation=0;
+    // manualAmount 保留，以便重新啟用時還原金額
+  } else if(allocMode==='manual'&&!e.manualAmount){
+    // 重新啟用但無歷史金額：以目前其他ETF總金額的平均值作為預設起點
+    const curTot=ETF_DB.filter(x=>x.enabled&&x.id!==id).reduce((s,x)=>s+(x.manualAmount||0),0);
+    const cnt=ETF_DB.filter(x=>x.enabled&&x.id!==id).length;
+    e.manualAmount=Math.round(cnt>0?curTot/cnt:1000000);
+  }
   renderETFCards();recalcAll();
 }
 function updateETF(id,f,v){
@@ -992,13 +1087,11 @@ function updateETF(id,f,v){
       const newY=Math.round(avg*perYear/e.price*1000)/10;
       if(newY>0.5&&newY<50){
         e.yield=newY;
-        // 直接更新殖利率輸入框，不重新渲染整張卡片（保持股價欄位 focus）
         const yInp=document.getElementById('inp_yield_'+id);
         if(yInp&&yInp!==document.activeElement) yInp.value=newY;
       }
     }
   }
-  clearManualLock(); // 股價或殖利率改變，重置鎖定讓總投入重新計算
   recalcAll();
 }
 
@@ -1006,14 +1099,9 @@ function setAlloc(id, newVal) {
   const etf = ETF_DB.find(x => x.id === id);
   if (!etf) return;
   const clamped = Math.max(0, Math.min(100, newVal || 0));
-
-  if (allocMode === 'manual') {
-    // 全手動模式：首次調整時鎖定總投入金額，後續其他ETF金額不受影響
-    if (_manualLockedTotInv === null) _manualLockedTotInv = getTotInv();
-    etf.allocation = clamped;
-  } else {
-    // 100% 自動模式：調整一檔，其餘按比例自動補齊
-    etf.allocation = clamped;
+  etf.allocation = clamped;
+  // 100% 自動模式：調整一檔，其餘按比例自動補齊
+  if (allocMode === '100pct') {
     const others = ETF_DB.filter(e => e.enabled && e.id !== id);
     const remaining = Math.max(0, 100 - clamped);
     if (others.length > 0) {
@@ -1039,13 +1127,13 @@ function setAlloc(id, newVal) {
 }
 
 function resetToDefault(){
-  ETF_DB[0].enabled=true;ETF_DB[0].allocation=28;
-  ETF_DB[1].enabled=true;ETF_DB[1].allocation=30;
-  ETF_DB[2].enabled=true;ETF_DB[2].allocation=42;
-  ETF_DB[3].enabled=false;ETF_DB[3].allocation=0;
-  ETF_DB[4].enabled=false;ETF_DB[4].allocation=0;
+  ETF_DB[0].enabled=true;ETF_DB[0].allocation=28;ETF_DB[0].manualAmount=0;
+  ETF_DB[1].enabled=true;ETF_DB[1].allocation=30;ETF_DB[1].manualAmount=0;
+  ETF_DB[2].enabled=true;ETF_DB[2].allocation=42;ETF_DB[2].manualAmount=0;
+  ETF_DB[3].enabled=false;ETF_DB[3].allocation=0;ETF_DB[3].manualAmount=0;
+  ETF_DB[4].enabled=false;ETF_DB[4].allocation=0;ETF_DB[4].manualAmount=0;
   document.getElementById('targetIncome').value=50000;
-  clearManualLock(); // 重置後清除鎖定
+  if(allocMode==='manual') initManualAmounts(); // 重置後重新換算投入金額
   renderETFCards();recalcAll();
 }
 function fmt(n){return n.toLocaleString(currentLang==='zh'?'zh-TW':'en-US')}
@@ -1069,6 +1157,7 @@ document.addEventListener('DOMContentLoaded',()=>{
 
   applyStaticI18n();
   renderETFCards();
+  if(allocMode==='manual') initManualAmounts(); // 頁面載入：初始化投入金額
   recalcAll();
   setTimeout(fetchLivePrices, 600);
   setInterval(fetchLivePrices, 300000);
