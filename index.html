@@ -224,7 +224,7 @@ footer{text-align:center;font-size:.7rem;color:var(--muted);padding:16px;border-
   <div class="card goal-bar">
     <div>
       <label id="labelTarget">每月目標領息（元）</label>
-      <input type="number" id="targetIncome" value="50000" min="1000" step="1000" oninput="recalcAll()">
+      <input type="number" id="targetIncome" value="50000" min="1000" step="1000" oninput="clearManualLock();recalcAll()">
     </div>
     <button class="btn btn-gold" id="btnBalance" onclick="autoBalance()">✨ 智慧均衡配置</button>
     <button class="btn btn-outline" id="btnReset" onclick="resetToDefault()">↺ 重置</button>
@@ -331,13 +331,18 @@ footer{text-align:center;font-size:.7rem;color:var(--muted);padding:16px;border-
    ETF DATA — auto-updated daily by GitHub Actions
    ═══════════════════════════════════════ */
 // <<AUTO_UPDATE_START>>
-const LAST_UPDATED = "2026-06-24";
+const LAST_UPDATED = "2026-04-23";
 const ETF_DB = [
-  {id:'00919',name:'群益台灣精選高息',price:30.2,yield:8.5,fundSize:4200,frequency:'quarterly',payMonths:[1, 4, 7, 10],color:'#22c55e',enabled:true,dividendHistory:[{"label":"2026Q1","amount":0.78},{"label":"2025Q4","amount":0.54},{"label":"2025Q3","amount":0.54},{"label":"2025Q2","amount":0.72},{"label":"2025Q1","amount":0.72},{"label":"2024Q4","amount":0.72},{"label":"2024Q3","amount":0.72},{"label":"2024Q2","amount":0.7}]},
-  {id:'0056',name:'元大高股息',price:52.8,yield:6.8,fundSize:4600,frequency:'quarterly',payMonths:[2, 5, 8, 11],color:'#3b82f6',enabled:true,dividendHistory:[{"label":"2026Q2","amount":1.0},{"label":"2025Q4+","amount":0.866},{"label":"2025Q3","amount":0.866},{"label":"2025Q2","amount":0.866},{"label":"2025Q1","amount":1.07},{"label":"2024Q4","amount":1.07},{"label":"2024Q3","amount":1.07},{"label":"2024Q2","amount":1.07}]},
-  {id:'00878',name:'國泰永續高股息',price:33.5,yield:5.0,fundSize:5800,frequency:'quarterly',payMonths:[3, 6, 9, 12],color:'#f97316',enabled:true,dividendHistory:[{"label":"2026Q1","amount":0.42},{"label":"2025Q4","amount":0.4},{"label":"2025Q3","amount":0.4},{"label":"2025Q2","amount":0.47},{"label":"2025Q1","amount":0.5},{"label":"2024Q4","amount":0.55},{"label":"2024Q3","amount":0.55},{"label":"2024Q2","amount":0.51}]},
-  {id:'00929',name:'復華台灣科技優息',price:31.14,yield:4.4,fundSize:4000,frequency:'monthly',payMonths:[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],color:'#a855f7',enabled:false,dividendHistory:[{"label":"2026/04","amount":0.13},{"label":"2026/03","amount":0.11},{"label":"2026/02","amount":0.1},{"label":"2026/01","amount":0.09},{"label":"2025/12","amount":0.09},{"label":"2025/11","amount":0.07},{"label":"2025/10","amount":0.07},{"label":"2025/09","amount":0.06}]},
-  {id:'00713',name:'元大台灣高息低波',price:60.05,yield:5.7,fundSize:2400,frequency:'quarterly',payMonths:[1, 4, 7, 10],color:'#ef4444',enabled:false,dividendHistory:[{"label":"2026Q1","amount":0.78},{"label":"2025Q4","amount":0.78},{"label":"2025Q3","amount":0.78},{"label":"2025Q2","amount":1.1},{"label":"2025Q1","amount":1.4},{"label":"2024Q4","amount":1.4},{"label":"2024Q3","amount":1.5},{"label":"2024Q2","amount":1.5}]},
+  {id:'00919',name:'群益台灣精選高息',price:23.87,yield:10.8,fundSize:4200,frequency:'quarterly',payMonths:[1,4,7,10],color:'#22c55e',enabled:true,
+   dividendHistory:[{label:'2026Q1',amount:0.78},{label:'2025Q4',amount:0.54},{label:'2025Q3',amount:0.54},{label:'2025Q2',amount:0.72},{label:'2025Q1',amount:0.72},{label:'2024Q4',amount:0.72},{label:'2024Q3',amount:0.72},{label:'2024Q2',amount:0.70}]},
+  {id:'0056',name:'元大高股息',price:41.56,yield:8.9,fundSize:4600,frequency:'quarterly',payMonths:[2,5,8,11],color:'#3b82f6',enabled:true,
+   dividendHistory:[{label:'2026Q2',amount:1.00},{label:'2025Q4+',amount:0.866},{label:'2025Q3',amount:0.866},{label:'2025Q2',amount:0.866},{label:'2025Q1',amount:1.07},{label:'2024Q4',amount:1.07},{label:'2024Q3',amount:1.07},{label:'2024Q2',amount:1.07}]},
+  {id:'00878',name:'國泰永續高股息',price:25.16,yield:6.7,fundSize:5800,frequency:'quarterly',payMonths:[3,6,9,12],color:'#f97316',enabled:true,
+   dividendHistory:[{label:'2026Q1',amount:0.42},{label:'2025Q4',amount:0.40},{label:'2025Q3',amount:0.40},{label:'2025Q2',amount:0.47},{label:'2025Q1',amount:0.50},{label:'2024Q4',amount:0.55},{label:'2024Q3',amount:0.55},{label:'2024Q2',amount:0.51}]},
+  {id:'00929',name:'復華台灣科技優息',price:22.67,yield:6.0,fundSize:4000,frequency:'monthly',payMonths:[1,2,3,4,5,6,7,8,9,10,11,12],color:'#a855f7',enabled:false,
+   dividendHistory:[{label:'2026/04',amount:0.13},{label:'2026/03',amount:0.11},{label:'2026/02',amount:0.10},{label:'2026/01',amount:0.09},{label:'2025/12',amount:0.09},{label:'2025/11',amount:0.07},{label:'2025/10',amount:0.07},{label:'2025/09',amount:0.06}]},
+  {id:'00713',name:'元大台灣高息低波',price:53.95,yield:6.4,fundSize:2400,frequency:'quarterly',payMonths:[1,4,7,10],color:'#ef4444',enabled:false,
+   dividendHistory:[{label:'2026Q1',amount:0.78},{label:'2025Q4',amount:0.78},{label:'2025Q3',amount:0.78},{label:'2025Q2',amount:1.10},{label:'2025Q1',amount:1.40},{label:'2024Q4',amount:1.40},{label:'2024Q3',amount:1.50},{label:'2024Q2',amount:1.50}]}
 ];
 // <<AUTO_UPDATE_END>>
 
@@ -555,6 +560,29 @@ function applyStaticI18n() {
 let chartMo=null, chartTrend=null;
 
 /* ─── LIVE PRICE ─── */
+async function tryFetchTWSE(){
+  /* 台灣證交所即時 API — 無 CORS 限制，官方數據 */
+  const ex=ETF_DB.map(e=>`tse_${e.id}.TW`).join('|');
+  const url=`https://mis.twse.com.tw/stock/api/getStockInfo.asp?json=1&delay=0&ex_ch=${ex}`;
+  try{
+    const r=await fetch(url,{signal:AbortSignal.timeout(8000)});
+    if(!r.ok) return null;
+    const d=await r.json();
+    const arr=d.msgArray;
+    if(!arr?.length) return null;
+    const results=arr.map(item=>{
+      // z = 最新成交價（交易時段），y = 昨日收盤價
+      const z=item.z;
+      const yc=parseFloat(item.y)||0;
+      const price=parseFloat(z&&z!=='-'&&z!=='0'?z:item.y)||0;
+      const chg=yc>0&&price>0?((price-yc)/yc*100):0;
+      return{symbol:`${item.c}.TW`,regularMarketPrice:price,regularMarketChangePercent:chg};
+    }).filter(r=>r.regularMarketPrice>0);
+    return results.length?results:null;
+  }catch{}
+  return null;
+}
+
 async function tryFetchYahoo(url){
   try{
     const r=await fetch(url,{signal:AbortSignal.timeout(7000)});
@@ -573,39 +601,41 @@ async function fetchLivePrices(){
     `https://query2.finance.yahoo.com/v8/finance/quote?symbols=${syms}&region=TW`,
     `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${syms}`,
   ];
-  // Also build proxied versions of the first endpoint
   const proxy1=`https://api.allorigins.win/raw?url=${encodeURIComponent(endpoints[0])}`;
   const proxy2=`https://corsproxy.io/?${encodeURIComponent(endpoints[0])}`;
 
-  let res=null;
-  for(const url of endpoints){
-    res=await tryFetchYahoo(url);
-    if(res) break;
+  // 1. 優先嘗試台灣證交所 API（官方數據，無 CORS）
+  let res=await tryFetchTWSE();
+  // 2. 備用：Yahoo Finance 多端點
+  if(!res?.length){
+    for(const url of endpoints){
+      res=await tryFetchYahoo(url);
+      if(res) break;
+    }
   }
-  if(!res) res=await tryFetchYahoo(proxy1);
-  if(!res) res=await tryFetchYahoo(proxy2);
+  if(!res?.length) res=await tryFetchYahoo(proxy1);
+  if(!res?.length) res=await tryFetchYahoo(proxy2);
 
   if(res?.length){
     res.forEach(q=>{
       const id=q.symbol.replace('.TW','');
       const e=ETF_DB.find(x=>x.id===id);
       if(!e) return;
-      // Only update price if the returned value is valid (> 0)
       const newPrice=q.regularMarketPrice;
       if(newPrice && newPrice>0) e.price=newPrice;
       e.priceChg=q.regularMarketChangePercent;
-      // Recalc yield only if dividendHistory has valid small amounts
+      // 根據最新股價重算殖利率
       const rec=e.dividendHistory.filter(d=>d.amount>0&&d.amount<50).slice(0,e.frequency==='monthly'?3:4);
       if(rec.length>0 && e.price>0){
         const avg=rec.reduce((s,d)=>s+d.amount,0)/rec.length;
         const perYear=e.frequency==='monthly'?12:4;
         const newY=Math.round(avg*perYear/e.price*1000)/10;
-        // Sanity check: Taiwan high-div ETF yield should be between 0.5% and 50%
         if(newY>0.5 && newY<50) e.yield=newY;
       }
-      // If current stored yield is clearly wrong (> 100%), reset to 0 so it shows as unknown
       if(e.yield>100) e.yield=0;
     });
+    // 股價更新後清除手動鎖定（讓持倉試算以新殖利率為基準）
+    _manualLockedTotInv=null;
     updateTicker(res,'live');
     renderETFCards();recalcAll();
   } else {
@@ -816,8 +846,8 @@ function renderETFCards(){
       <div class="months">${etf.payMonths.map(m=>`<span class="mchip" style="background:${etf.color}">${chipLabel(m)}</span>`).join('')}</div>
       ${hm}
       <div class="edit-row">
-        <div style="flex:1"><label>${t('priceLabel')}</label><input type="number" step=".1" value="${etf.price}" oninput="updateETF('${etf.id}','price',this.value)"></div>
-        <div style="flex:1"><label>${t('yieldLabel')}</label><input type="number" step=".1" value="${etf.yield}" oninput="updateETF('${etf.id}','yield',this.value)"></div>
+        <div style="flex:1"><label>${t('priceLabel')}</label><input type="number" step=".01" id="inp_price_${etf.id}" value="${etf.price.toFixed(2)}" oninput="updateETF('${etf.id}','price',this.value)"></div>
+        <div style="flex:1"><label>${t('yieldLabel')}</label><input type="number" step=".1" id="inp_yield_${etf.id}" value="${etf.yield}" oninput="updateETF('${etf.id}','yield',this.value)"></div>
       </div>
     </div>`;
   }).join('');
@@ -833,7 +863,11 @@ function calcMI(){
   });
   return mi;
 }
-function getTotInv(){const wy=getWY();return wy>0?(parseFloat(document.getElementById('targetIncome')?.value)||50000)*12/wy:0}
+function getTotInv(){
+  // 全手動模式：使用鎖定的總投入金額，避免調整單一ETF比例時其他ETF金額跟著變動
+  if(allocMode==='manual'&&_manualLockedTotInv!==null) return _manualLockedTotInv;
+  const wy=getWY();return wy>0?(parseFloat(document.getElementById('targetIncome')?.value)||50000)*12/wy:0;
+}
 function getWY(){return ETF_DB.filter(e=>e.enabled).reduce((s,e)=>s+(e.allocation||0)/100*e.yield/100,0)||0.01}
 
 function renderAlloc(){
@@ -916,30 +950,70 @@ function autoBalance(){
   act.forEach(e=>{e.allocation=Math.round(inv[e.id]/sum*1000)/10});
   const diff=100-act.reduce((s,e)=>s+(e.allocation||0),0);
   if(act.length)act[0].allocation=Math.round((act[0].allocation+diff)*10)/10;
+  clearManualLock(); // 重新均衡後清除鎖定，讓後續手動調整以新總額為基準
   recalcAll();
 }
 
 /* ─── ALLOC MODE ─── */
 let allocMode = 'manual';
+// 全手動模式：鎖定總投入金額，調整單一比例時其他ETF金額不受影響
+let _manualLockedTotInv = null;
+
+// 清除鎖定（當目標金額、股價、ETF啟用狀態等改變時呼叫）
+function clearManualLock(){ _manualLockedTotInv=null; }
 
 function setAllocMode(mode) {
   allocMode = mode;
+  _manualLockedTotInv=null; // 切換模式時重置鎖定
   document.getElementById('btnManual').className = 'mbtn' + (mode==='manual'?' active':'');
   document.getElementById('btn100pct').className = 'mbtn' + (mode==='100pct'?' active':'');
   document.getElementById('modeHint').innerHTML = mode === 'manual' ? t('manualHint') : t('autoHint');
 }
 
 /* ─── HANDLERS ─── */
-function toggleETF(id){const e=ETF_DB.find(x=>x.id===id);e.enabled=!e.enabled;if(!e.enabled)e.allocation=0;renderETFCards();recalcAll()}
-function updateETF(id,f,v){const e=ETF_DB.find(x=>x.id===id);e[f]=parseFloat(v)||e[f];recalcAll()}
+function toggleETF(id){
+  const e=ETF_DB.find(x=>x.id===id);e.enabled=!e.enabled;
+  if(!e.enabled)e.allocation=0;
+  clearManualLock(); // ETF啟用狀態改變，重置鎖定
+  renderETFCards();recalcAll();
+}
+function updateETF(id,f,v){
+  const e=ETF_DB.find(x=>x.id===id);
+  const parsed=parseFloat(v);
+  if(!isNaN(parsed)) e[f]=parsed;
+
+  // 手動修改股價時，自動重算殖利率
+  if(f==='price' && e.price>0){
+    const rec=e.dividendHistory.filter(d=>d.amount>0&&d.amount<50)
+                .slice(0,e.frequency==='monthly'?3:4);
+    if(rec.length>0){
+      const avg=rec.reduce((s,d)=>s+d.amount,0)/rec.length;
+      const perYear=e.frequency==='monthly'?12:4;
+      const newY=Math.round(avg*perYear/e.price*1000)/10;
+      if(newY>0.5&&newY<50){
+        e.yield=newY;
+        // 直接更新殖利率輸入框，不重新渲染整張卡片（保持股價欄位 focus）
+        const yInp=document.getElementById('inp_yield_'+id);
+        if(yInp&&yInp!==document.activeElement) yInp.value=newY;
+      }
+    }
+  }
+  clearManualLock(); // 股價或殖利率改變，重置鎖定讓總投入重新計算
+  recalcAll();
+}
 
 function setAlloc(id, newVal) {
   const etf = ETF_DB.find(x => x.id === id);
   if (!etf) return;
   const clamped = Math.max(0, Math.min(100, newVal || 0));
-  etf.allocation = clamped;
 
-  if (allocMode === '100pct') {
+  if (allocMode === 'manual') {
+    // 全手動模式：首次調整時鎖定總投入金額，後續其他ETF金額不受影響
+    if (_manualLockedTotInv === null) _manualLockedTotInv = getTotInv();
+    etf.allocation = clamped;
+  } else {
+    // 100% 自動模式：調整一檔，其餘按比例自動補齊
+    etf.allocation = clamped;
     const others = ETF_DB.filter(e => e.enabled && e.id !== id);
     const remaining = Math.max(0, 100 - clamped);
     if (others.length > 0) {
@@ -971,6 +1045,7 @@ function resetToDefault(){
   ETF_DB[3].enabled=false;ETF_DB[3].allocation=0;
   ETF_DB[4].enabled=false;ETF_DB[4].allocation=0;
   document.getElementById('targetIncome').value=50000;
+  clearManualLock(); // 重置後清除鎖定
   renderETFCards();recalcAll();
 }
 function fmt(n){return n.toLocaleString(currentLang==='zh'?'zh-TW':'en-US')}
