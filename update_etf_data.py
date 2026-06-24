@@ -150,9 +150,44 @@ def get_current_data_from_html(html_path):
 
 # ── 資料抓取 ─────────────────────────────────────────────────
 
+def fetch_twse_prices(etf_ids):
+    """
+    從台灣證交所即時 API 抓取股價（無需 CORS，官方來源）。
+    GitHub Actions 在盤前執行，使用「昨日收盤價」(y 欄位)。
+    """
+    ex_ch = '|'.join(f'tse_{i}.TW' for i in etf_ids)
+    url = f'https://mis.twse.com.tw/stock/api/getStockInfo.asp?json=1&delay=0&ex_ch={ex_ch}'
+    prices = {}
+    try:
+        resp = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=15)
+        resp.raise_for_status()
+        # TWSE 回應可能不帶 charset，強制 UTF-8
+        resp.encoding = 'utf-8'
+        data = resp.json()
+        for item in data.get('msgArray', []):
+            code = item.get('c', '').strip()
+            if not code:
+                continue
+            # z = 最新成交價（交易中），y = 昨日收盤（盤前/盤後均可用）
+            z = item.get('z', '-')
+            y_close = item.get('y', '0')
+            price_str = z if z not in ['-', '0', '', None] else y_close
+            price = safe_float(price_str)
+            if price and price > 0:
+                prices[code] = {'price': round(price, 2), 'change_pct': 0}
+        if prices:
+            log(f'  ✅ TWSE 成功：取得 {len(prices)} 支 → ' +
+                ', '.join(f'{k}=${v["price"]}' for k, v in prices.items()))
+        else:
+            log(f'  ↳ TWSE 回應為空或全為盤中休市符號（"-"）')
+    except Exception as e:
+        log(f'  ↳ TWSE 失敗: {e}')
+    return prices
+
+
 def fetch_yahoo_prices(etf_ids):
     """
-    從 Yahoo Finance 抓取最新股價。
+    從 Yahoo Finance 抓取最新股價（TWSE 失敗時的備用方案）。
     依序嘗試多個端點，任一成功即回傳。
     只記錄 price > 0 的有效結果。
     """
@@ -410,9 +445,13 @@ def main():
     log('📂 Step 0: 讀取現有 HTML 備用資料...')
     fallback = get_current_data_from_html(HTML_PATH)
 
-    # 1. 抓取股價
-    log('\n📈 Step 1: 抓取 Yahoo Finance 股價...')
-    prices = fetch_yahoo_prices(etf_ids)
+    # 1. 抓取股價（優先 TWSE，備用 Yahoo Finance）
+    log('\n📈 Step 1: 抓取股價...')
+    log('  [1a] 嘗試台灣證交所 API...')
+    prices = fetch_twse_prices(etf_ids)
+    if not prices:
+        log('  [1b] TWSE 無資料，改用 Yahoo Finance...')
+        prices = fetch_yahoo_prices(etf_ids)
 
     # 2. 抓取配息
     all_data = {}
