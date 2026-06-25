@@ -40,7 +40,19 @@ jobs:
           git add index.html
           # 只有在 index.html 有變更時才 commit
           if git diff --staged --quiet; then
-            echo "資料無變化，略過 commit"
+            # 即使資料無變化，每30天強制製造一次 commit 以防止 GitHub 停用排程
+            LAST_COMMIT_DATE=$(git log -1 --format="%ct")
+            NOW=$(date +%s)
+            DAYS_SINCE=$(( (NOW - LAST_COMMIT_DATE) / 86400 ))
+            if [ "$DAYS_SINCE" -ge 25 ]; then
+              echo "距上次 commit 已 ${DAYS_SINCE} 天，製造 keepalive commit 防止排程被停用"
+              echo "keepalive: $(date -u +%Y-%m-%d)" >> .github/keepalive.txt
+              git add .github/keepalive.txt
+              git commit -m "🔄 keepalive: 防止 GitHub Actions 排程停用 $(date -u +%Y-%m-%d)"
+              git push
+            else
+              echo "資料無變化，略過 commit（距上次 commit ${DAYS_SINCE} 天）"
+            fi
           else
             git commit -m "🤖 每日ETF資料更新 $(date -u +%Y-%m-%d)"
             git push
