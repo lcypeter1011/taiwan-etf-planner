@@ -42,6 +42,16 @@ ETF_META = {
 
 HTML_PATH = 'index.html'
 
+# ── 最終備用股價（硬編碼，當所有 API 均失敗時使用，避免一直回寫舊價格）──
+# 定期手動更新此區塊（用 yfinance 跑一次確認）
+FALLBACK_PRICES = {
+    '00919': 30.26,   # 2026-06-25
+    '0056':  53.20,   # 2026-06-25
+    '00878': 33.75,   # 2026-06-25
+    '00929': 31.86,   # 2026-06-25
+    '00713': 60.85,   # 2026-06-25
+}
+
 # ── 最終備用配息資料（硬編碼，當 MoneyDJ 和 HTML 備用均失敗時使用）──
 # 更新此區塊：每次人工確認配息後手動維護
 FALLBACK_DIVIDENDS = {
@@ -150,25 +160,65 @@ def get_current_data_from_html(html_path):
 
 # ── 資料抓取 ─────────────────────────────────────────────────
 
-def fetch_twse_prices(etf_ids):
+def fetch_twse_openapi_prices(etf_ids):
     """
-    從台灣證交所即時 API 抓取股價（無需 CORS，官方來源）。
-    GitHub Actions 在盤前執行，使用「昨日收盤價」(y 欄位)。
+    TWSE 官方 Open Data API — 專為自動化存取設計，無 IP 限制。
+    回傳當日或最近一個交易日的收盤價。
+    https://openapi.twse.com.tw/v1/exchangeReport/BWIBBU_d
+    """
+    url = 'https://openapi.twse.com.tw/v1/exchangeReport/BWIBBU_d'
+    prices = {}
+    try:
+        resp = requests.get(url, headers={'User-Agent': 'Mozilla/5.0',
+                                          'Accept': 'application/json'}, timeout=20)
+        resp.raise_for_status()
+        data = resp.json()
+        # 建立 {股票代號: 收盤價} 查詢表
+        price_map = {}
+        for row in data:
+            code = row.get('Code', '').strip()
+            close = safe_float(row.get('ClosingPrice', '') or row.get('殖利率(%)', ''))
+            # 嘗試各種可能的收盤價欄位名稱
+            for field in ('ClosePrice', 'ClosingPrice', '收盤價', 'closing_price'):
+                val = safe_float(row.get(field, ''))
+                if val and val > 0:
+                    price_map[code] = val
+                    break
+        for etf_id in etf_ids:
+            if etf_id in price_map and price_map[etf_id] > 0:
+                prices[etf_id] = {'price': round(price_map[etf_id], 2), 'change_pct': 0}
+        if prices:
+            log(f'  ✅ TWSE OpenAPI 成功：取得 {len(prices)} 支 → ' +
+                ', '.join(f'{k}=${v["price"]}' for k, v in prices.items()))
+        else:
+            log(f'  ↳ TWSE OpenAPI 回應中找不到目標 ETF（可能非交易日或欄位格式變更）')
+            # Debug: 印出第一筆資料的 key，方便診斷
+            if data:
+                log(f'  ↳ 回應欄位：{list(data[0].keys())}')
+    except Exception as e:
+        log(f'  ↳ TWSE OpenAPI 失敗: {e}')
+    return prices
+
+
+def fetch_twse_mis_prices(etf_ids):
+    """
+    台灣證交所即時 API（mis.twse.com.tw）。
+    盤中回傳最新成交價，盤前/盤後回傳昨日收盤。
+    注意：此 API 在 GitHub Actions 環境可能因 IP 被 403。
     """
     ex_ch = '|'.join(f'tse_{i}.TW' for i in etf_ids)
     url = f'https://mis.twse.com.tw/stock/api/getStockInfo.asp?json=1&delay=0&ex_ch={ex_ch}'
     prices = {}
     try:
-        resp = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=15)
+        resp = requests.get(url, headers={'User-Agent': 'Mozilla/5.0',
+                                          'Referer': 'https://mis.twse.com.tw/'}, timeout=15)
         resp.raise_for_status()
-        # TWSE 回應可能不帶 charset，強制 UTF-8
         resp.encoding = 'utf-8'
         data = resp.json()
         for item in data.get('msgArray', []):
             code = item.get('c', '').strip()
             if not code:
                 continue
-            # z = 最新成交價（交易中），y = 昨日收盤（盤前/盤後均可用）
             z = item.get('z', '-')
             y_close = item.get('y', '0')
             price_str = z if z not in ['-', '0', '', None] else y_close
@@ -176,20 +226,49 @@ def fetch_twse_prices(etf_ids):
             if price and price > 0:
                 prices[code] = {'price': round(price, 2), 'change_pct': 0}
         if prices:
-            log(f'  ✅ TWSE 成功：取得 {len(prices)} 支 → ' +
+            log(f'  ✅ TWSE MIS 成功：取得 {len(prices)} 支 → ' +
                 ', '.join(f'{k}=${v["price"]}' for k, v in prices.items()))
         else:
-            log(f'  ↳ TWSE 回應為空或全為盤中休市符號（"-"）')
+            log(f'  ↳ TWSE MIS 回應為空或全為盤中休市符號（"-"）')
     except Exception as e:
-        log(f'  ↳ TWSE 失敗: {e}')
+        log(f'  ↳ TWSE MIS 失敗: {e}')
     return prices
 
 
-def fetch_yahoo_prices(etf_ids):
+def fetch_yfinance_prices(etf_ids):
     """
-    從 Yahoo Finance 抓取最新股價（TWSE 失敗時的備用方案）。
-    依序嘗試多個端點，任一成功即回傳。
-    只記錄 price > 0 的有效結果。
+    yfinance 套件抓取近期收盤價（history 方式，比 fast_info 更穩定）。
+    """
+    prices = {}
+    try:
+        import yfinance as yf
+        for etf_id in etf_ids:
+            try:
+                ticker = yf.Ticker(f'{etf_id}.TW')
+                hist = ticker.history(period='5d')
+                if not hist.empty:
+                    price = float(hist['Close'].iloc[-1])
+                    if price > 0:
+                        prices[etf_id] = {'price': round(price, 2), 'change_pct': 0}
+            except Exception as e:
+                log(f'    [{etf_id}] yfinance 失敗: {e}')
+            time.sleep(0.5)
+        if prices:
+            log(f'  ✅ yfinance 成功：取得 {len(prices)} 支 → ' +
+                ', '.join(f'{k}=${v["price"]}' for k, v in prices.items()))
+        else:
+            log(f'  ↳ yfinance 全部失敗')
+    except ImportError:
+        log('  ⚠️  yfinance 未安裝')
+    except Exception as e:
+        log(f'  ⚠️  yfinance 失敗: {e}')
+    return prices
+
+
+def fetch_yahoo_api_prices(etf_ids):
+    """
+    Yahoo Finance REST API（不需 yfinance 套件）。
+    依序嘗試 query1/query2 × v8/v7，任一成功即回傳。
     """
     symbols = ','.join(f'{i}.TW' for i in etf_ids)
     prices = {}
@@ -207,7 +286,6 @@ def fetch_yahoo_prices(etf_ids):
             if resp.status_code != 200:
                 log(f'  ↳ HTTP {resp.status_code}，嘗試下一端點...')
                 continue
-
             results = resp.json().get('quoteResponse', {}).get('result', [])
             for q in results:
                 raw_price = q.get('regularMarketPrice')
@@ -217,41 +295,68 @@ def fetch_yahoo_prices(etf_ids):
                         'price': round(float(raw_price), 2),
                         'change_pct': round(q.get('regularMarketChangePercent', 0), 2),
                     }
-
             if prices:
-                log(f'  ✅ Yahoo Finance 成功（{url.split("?")[0].split("/")[-2]}）: 取得 {len(prices)} 支')
+                log(f'  ✅ Yahoo API 成功（{url.split("?")[0].split("/")[-2]}）: 取得 {len(prices)} 支')
                 return prices
             else:
                 log(f'  ↳ 回應為空，嘗試下一端點...')
-
         except Exception as e:
             log(f'  ↳ 失敗: {e}')
         time.sleep(0.8)
 
-    # ── 備用：yfinance 套件 ──────────────────────────────────
-    if not prices:
-        log('  🔄 嘗試 yfinance 備用方案...')
-        try:
-            import yfinance as yf
-            symbols_str = ' '.join(f'{i}.TW' for i in etf_ids)
-            tickers = yf.Tickers(symbols_str)
-            for etf_id in etf_ids:
-                try:
-                    info = tickers.tickers[f'{etf_id}.TW'].fast_info
-                    price = getattr(info, 'last_price', None)
-                    if price and float(price) > 0:
-                        prices[etf_id] = {'price': round(float(price), 2), 'change_pct': 0}
-                except Exception:
-                    pass
-            if prices:
-                log(f'  ✅ yfinance 備用成功：取得 {len(prices)} 支')
-        except ImportError:
-            log('  ⚠️  yfinance 未安裝，跳過備用方案')
-        except Exception as e:
-            log(f'  ⚠️  yfinance 備用失敗: {e}')
+    return prices
 
-    if not prices:
-        log('  ❌ 所有股價端點均失敗，將保留 HTML 中原有股價')
+
+def fetch_all_prices(etf_ids):
+    """
+    依序嘗試所有價格來源，回傳第一個成功的結果。
+    順序：yfinance(history) → TWSE MIS → Yahoo API → TWSE OpenAPI(個股用) → FALLBACK_PRICES
+
+    注意：TWSE OpenAPI BWIBBU_d 端點只包含個股（不含 ETF），故排在最後。
+    yfinance history() 在 GitHub Actions 環境最穩定，優先使用。
+    """
+    prices = {}
+
+    # 1. yfinance（.history() 方式 — GitHub Actions 最穩定）
+    log('  [1a] yfinance（history 方式，最可靠）...')
+    prices = fetch_yfinance_prices(etf_ids)
+    if len(prices) == len(etf_ids):
+        return prices
+
+    # 2. TWSE MIS 即時 API
+    log('  [1b] TWSE MIS 即時 API...')
+    prices2 = fetch_twse_mis_prices(etf_ids)
+    for k, v in prices2.items():
+        if k not in prices:
+            prices[k] = v
+    if len(prices) == len(etf_ids):
+        return prices
+
+    # 3. Yahoo Finance REST API
+    log('  [1c] Yahoo Finance REST API...')
+    prices3 = fetch_yahoo_api_prices(etf_ids)
+    for k, v in prices3.items():
+        if k not in prices:
+            prices[k] = v
+    if len(prices) == len(etf_ids):
+        return prices
+
+    # 4. TWSE Open Data API（注意：BWIBBU_d 只含個股，若 ETF 不在其中則補 0）
+    log('  [1d] TWSE Open Data API（個股優先，ETF 可能無資料）...')
+    prices4 = fetch_twse_openapi_prices(etf_ids)
+    for k, v in prices4.items():
+        if k not in prices:
+            prices[k] = v
+
+    if prices:
+        return prices
+
+    # 5. 硬編碼備用價格（最後防線，防止寫回舊的 HTML 價格）
+    log('  [1e] 所有 API 失敗，使用硬編碼備用股價...')
+    for etf_id in etf_ids:
+        if etf_id not in prices and etf_id in FALLBACK_PRICES:
+            prices[etf_id] = {'price': FALLBACK_PRICES[etf_id], 'change_pct': 0}
+            log(f'    [{etf_id}] 使用硬編碼備用價格 ${FALLBACK_PRICES[etf_id]}')
 
     return prices
 
@@ -445,13 +550,9 @@ def main():
     log('📂 Step 0: 讀取現有 HTML 備用資料...')
     fallback = get_current_data_from_html(HTML_PATH)
 
-    # 1. 抓取股價（優先 TWSE，備用 Yahoo Finance）
+    # 1. 抓取股價（多層備用：TWSE OpenAPI → TWSE MIS → yfinance → Yahoo API → 硬編碼）
     log('\n📈 Step 1: 抓取股價...')
-    log('  [1a] 嘗試台灣證交所 API...')
-    prices = fetch_twse_prices(etf_ids)
-    if not prices:
-        log('  [1b] TWSE 無資料，改用 Yahoo Finance...')
-        prices = fetch_yahoo_prices(etf_ids)
+    prices = fetch_all_prices(etf_ids)
 
     # 2. 抓取配息
     all_data = {}
@@ -460,11 +561,17 @@ def main():
         log(f'  [{etf_id}] {meta["name"]}...')
         divs = fetch_moneydj_dividends(etf_id)
 
-        # ── 股價：新抓 → HTML 備用（絕不寫 0）─────────────────
+        # ── 股價：新抓 → 硬編碼 FALLBACK_PRICES → HTML 備用（絕不寫 0）──
         price = prices.get(etf_id, {}).get('price', 0)
         if not price or price <= 0:
-            price = fallback[etf_id]['price']
-            if price > 0:
+            # 優先使用硬編碼備用價格（比 HTML 備用更新）
+            fp = FALLBACK_PRICES.get(etf_id, 0)
+            html_p = fallback[etf_id]['price']
+            if fp > 0:
+                price = fp
+                log(f'    ℹ️  股價使用硬編碼備用 ${price}（請更新 FALLBACK_PRICES）')
+            elif html_p > 0:
+                price = html_p
                 log(f'    ℹ️  股價使用 HTML 備用值 ${price}')
             else:
                 log(f'    ⚠️  股價完全無法取得（寫入 0）')
