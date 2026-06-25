@@ -341,6 +341,10 @@ const ETF_DB = [
 ];
 // <<AUTO_UPDATE_END>>
 
+/* ETF_NAV — 每單位淨值，由 tryFetchTWSE() 從 TWSE nv 欄位即時填入
+   key = ETF 代號（如 '0056'），value = 淨值（number） */
+const ETF_NAV = {};
+
 /* ═══════════════════════════════════════
    i18n — bilingual support
    ═══════════════════════════════════════ */
@@ -358,6 +362,9 @@ const I18N = {
     /* health labels */
     stability:'穩定性',trend:'趨&ensp;勢',dividYield:'殖利率',scale:'規&ensp;模',
     tUp:'上升 📈',tDown:'下降 📉',tStable:'持平 ➡️',
+    /* premium/discount */
+    premiumRate:'溢價率',premiumLabel:'溢價',discountLabel:'折價',parLabel:'平價',
+    navNA:'淨值待更新',
     /* health flags */
     highVol:'配息波動偏高',bigDrop:'配息明顯下滑 ⚠️',smallDrop:'配息小幅下滑',
     growing:'配息成長趨勢 ✅',highYield:'高殖利率競爭力強',smallScale:'規模未達4000億',
@@ -433,6 +440,9 @@ const I18N = {
     /* health labels */
     stability:'Stability',trend:'Trend',dividYield:'Yield',scale:'AUM',
     tUp:'Rising 📈',tDown:'Falling 📉',tStable:'Stable ➡️',
+    /* premium/discount */
+    premiumRate:'Premium',premiumLabel:'Premium',discountLabel:'Discount',parLabel:'Par',
+    navNA:'NAV pending',
     /* health flags */
     highVol:'High dividend volatility',bigDrop:'Significant drop ⚠️',smallDrop:'Slight decline',
     growing:'Growing trend ✅',highYield:'Strong high-yield',smallScale:'AUM below 400B',
@@ -568,12 +578,15 @@ async function tryFetchTWSE(){
     const arr=d.msgArray;
     if(!arr?.length) return null;
     const results=arr.map(item=>{
-      // z = 最新成交價（交易時段），y = 昨日收盤價
+      // z = 最新成交價（交易時段），y = 昨日收盤價，nv = 每單位淨值
       const z=item.z;
       const yc=parseFloat(item.y)||0;
       const price=parseFloat(z&&z!=='-'&&z!=='0'?z:item.y)||0;
       const chg=yc>0&&price>0?((price-yc)/yc*100):0;
-      return{symbol:`${item.c}.TW`,regularMarketPrice:price,regularMarketChangePercent:chg};
+      const nav=parseFloat(item.nv)||0;
+      // 即時存入 ETF_NAV（供健康評估溢價率計算用）
+      if(nav>0 && item.c) ETF_NAV[item.c.trim()]=nav;
+      return{symbol:`${item.c}.TW`,regularMarketPrice:price,regularMarketChangePercent:chg,nav};
     }).filter(r=>r.regularMarketPrice>0);
     return results.length?results:null;
   }catch{}
@@ -727,6 +740,27 @@ function renderHealthGrid(){
     const r=34,cx=38,cy=38,circ=2*Math.PI*r,dash=`${h.tot/100*circ} ${circ}`;
     const tl=h.tdir==='up'?t('tUp'):h.tdir==='down'?t('tDown'):t('tStable');
     const tc=h.tdir==='up'?'t-up':h.tdir==='down'?'t-down':'t-stable';
+    // ── 溢價率計算 ──────────────────────────────────────────
+    const nav=ETF_NAV[etf.id]||0;
+    let premHtml='';
+    if(nav>0 && etf.price>0){
+      const prem=Math.round((etf.price-nav)/nav*1000)/10; // 溢價率 %
+      const premStr=(prem>=0?'+':'')+prem.toFixed(1)+'%';
+      // 顏色：折價→綠、平價→灰、小溢價→橙、高溢價→紅
+      const premColor=prem<=-1?'#22c55e':prem<=1?'#94a3b8':prem<=3?'#f97316':'#ef4444';
+      const premLabel=Math.abs(prem)<0.5?t('parLabel'):prem>0?t('premiumLabel'):t('discountLabel');
+      premHtml=`<div style="display:flex;align-items:center;justify-content:space-between;margin:6px 0;padding:5px 9px;background:${premColor}12;border-radius:8px;border:1px solid ${premColor}30">
+        <span style="font-size:.74rem;color:#64748b">${t('premiumRate')}</span>
+        <span style="font-size:.88rem;font-weight:700;color:${premColor}">${premStr}</span>
+        <span style="font-size:.68rem;padding:2px 7px;border-radius:10px;background:${premColor}22;color:${premColor};font-weight:600">${premLabel}</span>
+      </div>
+      <div style="font-size:.66rem;color:#94a3b8;margin:-2px 0 4px;padding:0 2px">淨值 $${nav.toFixed(2)} · 市價 $${etf.price.toFixed(2)}</div>`;
+    } else {
+      premHtml=`<div style="display:flex;align-items:center;justify-content:space-between;margin:6px 0;padding:5px 9px;background:#f8fafc;border-radius:8px;border:1px solid #e2e8f0">
+        <span style="font-size:.74rem;color:#64748b">${t('premiumRate')}</span>
+        <span style="font-size:.75rem;color:#94a3b8">${t('navNA')}</span>
+      </div>`;
+    }
     return `<div class="hcard" style="border-top:4px solid ${etf.color}">
       <div class="score-wrap">
         <svg width="76" height="76" viewBox="0 0 76 76">
@@ -742,6 +776,7 @@ function renderHealthGrid(){
         <div class="sub-row"><span>${t('dividYield')}</span><div class="sub-bar"><div class="sub-fill" style="width:${h.ys/30*100}%;background:${etf.color}"></div></div><span>${h.ys}/30</span></div>
         <div class="sub-row"><span>${t('scale')}</span><div class="sub-bar"><div class="sub-fill" style="width:${h.ss/10*100}%;background:${etf.color}"></div></div><span>${h.ss}/10</span></div>
       </div>
+      ${premHtml}
       <div style="margin-bottom:6px"><span class="tbadge ${tc}">${tl}</span></div>
       <div class="flag-list">${h.flags.map(f=>`<div class="flag f-${f.t}">${f.s}</div>`).join('')}</div>
     </div>`;
