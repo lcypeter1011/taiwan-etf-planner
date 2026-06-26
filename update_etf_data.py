@@ -108,7 +108,7 @@ def get_current_data_from_html(html_path):
     從現有 index.html 讀取股價、殖利率、配息記錄作為備用。
     只讀取合理的值（price>0, 0.1<yield<50, 有效配息陣列）。
     """
-    current = {etf_id: {'price': 0, 'yield': 0, 'dividends': []} for etf_id in ETF_META}
+    current = {etf_id: {'price': 0, 'yield': 0, 'dividends': [], 'nav': 0} for etf_id in ETF_META}
     try:
         with open(html_path, 'r', encoding='utf-8') as f:
             content = f.read()
@@ -133,6 +133,13 @@ def get_current_data_from_html(html_path):
                 y = safe_float(yield_m.group(1))
                 if y and 0.1 < y < 50:
                     current[etf_id]['yield'] = y
+
+            # 讀取 nav（合理範圍：1~1000）
+            nav_m = re.search(rf"id:'{re.escape(etf_id)}'[^}}]*?nav:([\d.]+)", block)
+            if nav_m:
+                n = safe_float(nav_m.group(1))
+                if n and 1 < n < 1000:
+                    current[etf_id]['nav'] = n
 
             # 讀取 dividendHistory（只接受每單位配息在 0.01~10 TWD 的記錄）
             div_m = re.search(
@@ -263,6 +270,33 @@ def fetch_yfinance_prices(etf_ids):
     except Exception as e:
         log(f'  ⚠️  yfinance 失敗: {e}')
     return prices
+
+
+def fetch_nav(etf_ids):
+    """
+    從 yfinance 的 info.navPrice 欄位抓取每單位淨值（NAV）。
+    navPrice 為 Yahoo Finance 提供的最近一次淨值，盤外時間也有資料。
+    回傳 {etf_id: nav_price} dict。
+    """
+    navs = {}
+    try:
+        import yfinance as yf
+        for etf_id in etf_ids:
+            try:
+                info = yf.Ticker(f'{etf_id}.TW').info
+                nav = info.get('navPrice')
+                if nav and float(nav) > 0:
+                    navs[etf_id] = round(float(nav), 2)
+            except Exception as e:
+                log(f'    [{etf_id}] NAV 抓取失敗: {e}')
+            time.sleep(0.3)
+        if navs:
+            log(f'  ✅ NAV 成功：' + ', '.join(f'{k}=${v}' for k, v in navs.items()))
+        else:
+            log(f'  ↳ NAV 全部失敗，將保留 HTML 中原有 NAV')
+    except Exception as e:
+        log(f'  ⚠️  NAV 抓取例外: {e}')
+    return navs
 
 
 def fetch_yahoo_api_prices(etf_ids):
@@ -487,6 +521,7 @@ def build_etf_db_js(all_data, today):
         divs  = data.get('dividends') or []
         price = data.get('price', 0)
         y     = data.get('yield', 0)
+        nav   = data.get('nav', 0)
 
         # ── 最終防呆：確保寫入的數值合理 ─────────────────────
         # 每單位配息必須在合理範圍（0.01~10 TWD），否則視為爬蟲錯誤，清空
@@ -499,6 +534,9 @@ def build_etf_db_js(all_data, today):
         if not (0.1 <= y <= 50):
             log(f'  ⚠️  [{etf_id}] 殖利率 {y}% 異常，重新計算')
             y = calc_yield(divs, price, meta['frequency']) if divs and price else 0
+        # NAV 合理性：1~1000 TWD，否則寫 0
+        if not (1 < nav < 1000):
+            nav = 0
 
         divs_json  = json.dumps(divs, ensure_ascii=False, separators=(',', ':'))
         pay_months = json.dumps(meta['payMonths'])
@@ -508,6 +546,7 @@ def build_etf_db_js(all_data, today):
             f"price:{price},yield:{y},fundSize:{meta['fundSize']},"
             f"frequency:'{meta['frequency']}',payMonths:{pay_months},"
             f"color:'{meta['color']}',enabled:{meta['defaultEnabled']},"
+            f"nav:{nav},"
             f"dividendHistory:{divs_json}}},"
         )
 
@@ -550,9 +589,13 @@ def main():
     log('📂 Step 0: 讀取現有 HTML 備用資料...')
     fallback = get_current_data_from_html(HTML_PATH)
 
-    # 1. 抓取股價（多層備用：TWSE OpenAPI → TWSE MIS → yfinance → Yahoo API → 硬編碼）
+    # 1. 抓取股價（多層備用：yfinance → TWSE MIS → Yahoo API → 硬編碼）
     log('\n📈 Step 1: 抓取股價...')
     prices = fetch_all_prices(etf_ids)
+
+    # 1b. 抓取 NAV（yfinance navPrice，盤外時間也有最近一期資料）
+    log('\n📐 Step 1b: 抓取每單位淨值（NAV）...')
+    navs = fetch_nav(etf_ids)
 
     # 2. 抓取配息
     all_data = {}
@@ -607,10 +650,18 @@ def main():
                 else:
                     log(f'    ⚠️  殖利率無法計算，寫入 0')
 
+        # ── NAV：新抓 → HTML 備用（保留上次的值）──────────────
+        nav = navs.get(etf_id, 0)
+        if not nav or nav <= 0:
+            nav = fallback[etf_id].get('nav', 0)
+            if nav > 0:
+                log(f'    ℹ️  NAV 使用 HTML 備用值 ${nav}')
+
         all_data[etf_id] = {
             'dividends': divs,
             'price': price,
             'yield': y,
+            'nav': nav,
             '_source': source,
         }
         time.sleep(1.2)
@@ -626,9 +677,12 @@ def main():
         meta = ETF_META[etf_id]
         p    = data['price']
         y    = data['yield']
+        nav  = data.get('nav', 0)
         d_ok = '✅' if data['dividends'] else '⚠️ '
         p_ok = '✅' if p > 0 else '❌'
-        log(f'  {d_ok}{p_ok} {etf_id} {meta["name"][:8]}: 股價=${p}, 殖利率={y}%')
+        nav_str = f', NAV=${nav}' if nav > 0 else ', NAV=—'
+        prem_str = f' ({((p-nav)/nav*100):+.1f}%)' if nav > 0 and p > 0 else ''
+        log(f'  {d_ok}{p_ok} {etf_id} {meta["name"][:8]}: 股價=${p}{nav_str}{prem_str}, 殖利率={y}%')
 
     if success:
         log(f'\n✅ 完成！index.html 已更新至 {today}')
